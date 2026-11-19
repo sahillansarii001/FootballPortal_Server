@@ -27,7 +27,10 @@ const updateMatchSchema = z.object({
   }).optional(),
   matchTime: z.string().optional(),
   venue: z.string().optional(),
-  status: z.enum(Object.values(MATCH_STATUS)).optional()
+  stage: z.string().optional(),
+  status: z.enum(Object.values(MATCH_STATUS)).optional(),
+  teamAScore: z.number().int().min(0).optional(),
+  teamBScore: z.number().int().min(0).optional()
 });
 
 module.exports = {

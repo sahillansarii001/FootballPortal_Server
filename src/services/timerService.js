@@ -299,13 +299,27 @@ class TimerService {
       }
 
       const currentStage = match.timer.currentStage;
-      const currentIndex = STAGE_ORDER.indexOf(currentStage);
+      let nextStage;
 
-      if (currentIndex === -1 || currentIndex >= STAGE_ORDER.length - 1) {
+      // Handle Stage Transition with 2-Minute Draw Decider rule:
+      // If regulation ends in a draw (e.g. 1-1), 2 minutes extra time is awarded
+      if (currentStage === TIMER_STAGES.FIRST_HALF) {
+        nextStage = TIMER_STAGES.TRANSITION_GAP;
+      } else if (currentStage === TIMER_STAGES.TRANSITION_GAP) {
+        nextStage = TIMER_STAGES.HALF_TIME;
+      } else if (currentStage === TIMER_STAGES.HALF_TIME) {
+        nextStage = TIMER_STAGES.SECOND_HALF;
+      } else if (currentStage === TIMER_STAGES.SECOND_HALF) {
+        if (match.teamAScore === match.teamBScore) {
+          nextStage = TIMER_STAGES.EXTRA_TIME; // Draw -> 2 more minutes
+        } else {
+          nextStage = TIMER_STAGES.COMPLETED;
+        }
+      } else if (currentStage === TIMER_STAGES.EXTRA_TIME) {
+        nextStage = TIMER_STAGES.COMPLETED;
+      } else {
         return match;
       }
-
-      const nextStage = STAGE_ORDER[currentIndex + 1];
 
       // Archive previous stage in stageHistory
       match.timer.stageHistory.push({

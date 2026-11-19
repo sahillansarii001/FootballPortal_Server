@@ -28,6 +28,7 @@ const TIMER_STAGES = {
   TRANSITION_GAP: 'Transition Gap',
   HALF_TIME: 'Half-Time',
   SECOND_HALF: 'Second Half',
+  EXTRA_TIME: 'Extra Time',
   COMPLETED: 'Match Completed'
 };
 
@@ -37,6 +38,7 @@ const STAGE_DURATIONS = {
   [TIMER_STAGES.TRANSITION_GAP]: 20,    // 20 seconds whistle/leaving field
   [TIMER_STAGES.HALF_TIME]: 120,        // 2 minutes break
   [TIMER_STAGES.SECOND_HALF]: 240,      // 4 minutes
+  [TIMER_STAGES.EXTRA_TIME]: 120,       // 2 minutes extra time for draw decider
   [TIMER_STAGES.COMPLETED]: 0
 };
 
@@ -45,6 +47,7 @@ const STAGE_ORDER = [
   TIMER_STAGES.TRANSITION_GAP,
   TIMER_STAGES.HALF_TIME,
   TIMER_STAGES.SECOND_HALF,
+  TIMER_STAGES.EXTRA_TIME,
   TIMER_STAGES.COMPLETED
 ];
 
