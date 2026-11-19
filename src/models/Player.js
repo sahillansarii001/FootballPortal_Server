@@ -14,6 +14,11 @@ const playerSchema = new mongoose.Schema(
       min: [1, 'Jersey number must be at least 1'],
       max: [99, 'Jersey number cannot exceed 99']
     },
+    club: {
+      type: String,
+      trim: true,
+      default: 'Independent Club'
+    },
     team: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Team',

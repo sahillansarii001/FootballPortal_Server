@@ -1,4 +1,9 @@
 const MatchService = require('../services/matchService');
+const Match = require('../models/Match');
+const TimerService = require('../services/timerService');
+const StandingsService = require('../services/standingsService');
+const { socketEmitter } = require('../sockets/socketManager');
+const { MATCH_STATUS, TIMER_STAGES } = require('../utils/constants');
 const ApiResponse = require('../utils/apiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 
@@ -62,6 +67,52 @@ const getMatchTimeline = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, 'Match chronological timeline fetched successfully', timeline);
 });
 
+const endMatch = asyncHandler(async (req, res) => {
+  const match = await Match.findById(req.params.id);
+  if (!match) {
+    return ApiResponse.notFound(res, 'Match not found');
+  }
+
+  match.status = MATCH_STATUS.COMPLETED;
+  match.timer.isRunning = false;
+  match.timer.isPaused = false;
+  match.timer.remainingTime = 0;
+  match.timer.currentStage = TIMER_STAGES.COMPLETED;
+
+  if (match.teamAScore > match.teamBScore) {
+    match.winner = match.teamA;
+    match.matchResult = 'Regulation Win';
+  } else if (match.teamBScore > match.teamAScore) {
+    match.winner = match.teamB;
+    match.matchResult = 'Regulation Win';
+  } else {
+    match.matchResult = 'Draw';
+  }
+
+  await match.save();
+  await TimerService.finalizeMatch(match._id);
+
+  if (match.tournament) {
+    await StandingsService.recalculateTournamentStandings(match.tournament);
+  }
+
+  socketEmitter.broadcastMatchCompleted(match._id, match.tournament, {
+    matchId: match._id,
+    status: MATCH_STATUS.COMPLETED,
+    winner: match.winner,
+    matchResult: match.matchResult,
+    teamAScore: match.teamAScore,
+    teamBScore: match.teamBScore
+  });
+
+  const updated = await Match.findById(match._id)
+    .populate('teamA', 'name logo')
+    .populate('teamB', 'name logo')
+    .populate('winner', 'name logo');
+
+  return ApiResponse.success(res, 'Match ended and finalized successfully', updated);
+});
+
 module.exports = {
   scheduleMatch,
   updateMatch,
@@ -74,5 +125,6 @@ module.exports = {
   getMatchesByTeam,
   getLiveMatchState,
   getMatchEvents,
-  getMatchTimeline
+  getMatchTimeline,
+  endMatch
 };

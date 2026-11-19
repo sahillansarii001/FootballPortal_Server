@@ -63,9 +63,9 @@ const seedData = async () => {
         description: 'Dynamic high-press offense with clinical finishing',
         coach: 'Marcus Henderson',
         players: [
-          { name: 'Mateo Vance', jerseyNumber: 9, position: PLAYER_POSITIONS.FORWARD, isCaptain: true, goals: 2, matchesPlayed: 1 },
-          { name: 'Aaron Chen', jerseyNumber: 8, position: PLAYER_POSITIONS.MIDFIELDER, goals: 1, matchesPlayed: 1 },
-          { name: 'Kasper Jensen', jerseyNumber: 1, position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 2, matchesPlayed: 1 }
+          { name: 'Mateo Vance', jerseyNumber: 9, club: 'Bay Area Elite SC', position: PLAYER_POSITIONS.FORWARD, isCaptain: true, goals: 2, matchesPlayed: 1 },
+          { name: 'Aaron Chen', jerseyNumber: 8, club: 'Silicon Valley FC', position: PLAYER_POSITIONS.MIDFIELDER, goals: 1, matchesPlayed: 1 },
+          { name: 'Kasper Jensen', jerseyNumber: 1, club: 'Nordic Stars Athletic', position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 2, matchesPlayed: 1 }
         ],
         matchesPlayed: 0,
         matchesWon: 0,
@@ -81,9 +81,9 @@ const seedData = async () => {
         description: 'Rock-solid backline and explosive counter-attacks',
         coach: 'David Alvarez',
         players: [
-          { name: 'Julian Morales', jerseyNumber: 9, position: PLAYER_POSITIONS.FORWARD, isCaptain: true, goals: 1, matchesPlayed: 1 },
-          { name: 'Marcus Cole', jerseyNumber: 10, position: PLAYER_POSITIONS.MIDFIELDER, goals: 0, matchesPlayed: 1 },
-          { name: 'Gabriel Santos', jerseyNumber: 1, position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 1, matchesPlayed: 1 }
+          { name: 'Julian Morales', jerseyNumber: 9, club: 'SoCal Gunners FC', position: PLAYER_POSITIONS.FORWARD, isCaptain: true, goals: 1, matchesPlayed: 1 },
+          { name: 'Marcus Cole', jerseyNumber: 10, club: 'Westwood City SC', position: PLAYER_POSITIONS.MIDFIELDER, goals: 0, matchesPlayed: 1 },
+          { name: 'Gabriel Santos', jerseyNumber: 1, club: 'Pacific Waves FC', position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 1, matchesPlayed: 1 }
         ],
         matchesPlayed: 0,
         matchesWon: 0,
@@ -99,9 +99,9 @@ const seedData = async () => {
         description: 'Calculated positional play and set-piece mastery',
         coach: 'Arthur Pendelton',
         players: [
-          { name: 'Lucas Wright', jerseyNumber: 8, position: PLAYER_POSITIONS.MIDFIELDER, isCaptain: true, goals: 1, matchesPlayed: 1, wins: 1 },
-          { name: 'Liam Evans', jerseyNumber: 11, position: PLAYER_POSITIONS.FORWARD, goals: 1, matchesPlayed: 1, wins: 1 },
-          { name: 'Arthur Pendelton', jerseyNumber: 1, position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 3, matchesPlayed: 1, wins: 1 }
+          { name: 'Lucas Wright', jerseyNumber: 8, club: 'Boston Athletic SC', position: PLAYER_POSITIONS.MIDFIELDER, isCaptain: true, goals: 1, matchesPlayed: 1, wins: 1 },
+          { name: 'Liam Evans', jerseyNumber: 11, club: 'Cambridge Rovers FC', position: PLAYER_POSITIONS.FORWARD, goals: 1, matchesPlayed: 1, wins: 1 },
+          { name: 'Arthur Pendelton', jerseyNumber: 1, club: 'Crimson Academy SC', position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 3, matchesPlayed: 1, wins: 1 }
         ],
         matchesPlayed: 1,
         matchesWon: 1,
@@ -117,9 +117,9 @@ const seedData = async () => {
         description: 'High-tempo vertical passing and tenacious midfield duels',
         coach: 'Jean-Paul Giraud',
         players: [
-          { name: 'Derrick Vance', jerseyNumber: 9, position: PLAYER_POSITIONS.FORWARD, isCaptain: true, goals: 1, matchesPlayed: 1, losses: 1 },
-          { name: 'Noah Miller', jerseyNumber: 10, position: PLAYER_POSITIONS.MIDFIELDER, goals: 0, matchesPlayed: 1, losses: 1 },
-          { name: 'Jean-Paul Giraud', jerseyNumber: 1, position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 2, matchesPlayed: 1, losses: 1 }
+          { name: 'Derrick Vance', jerseyNumber: 9, club: 'Manhattan United FC', position: PLAYER_POSITIONS.FORWARD, isCaptain: true, goals: 1, matchesPlayed: 1, losses: 1 },
+          { name: 'Noah Miller', jerseyNumber: 10, club: 'Empire State SC', position: PLAYER_POSITIONS.MIDFIELDER, goals: 0, matchesPlayed: 1, losses: 1 },
+          { name: 'Jean-Paul Giraud', jerseyNumber: 1, club: 'Gotham City FC', position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 2, matchesPlayed: 1, losses: 1 }
         ],
         matchesPlayed: 1,
         matchesWon: 0,

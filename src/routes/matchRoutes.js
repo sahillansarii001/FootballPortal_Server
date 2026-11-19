@@ -59,6 +59,20 @@ router.delete(
   matchController.deleteMatch
 );
 
+router.post(
+  '/:id/end',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN),
+  matchController.endMatch
+);
+
+router.post(
+  '/:id/finalize',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN),
+  matchController.endMatch
+);
+
 // ==========================================
 // Live Match Timer Routes
 // ==========================================
