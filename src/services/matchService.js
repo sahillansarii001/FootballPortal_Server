@@ -155,40 +155,56 @@ class MatchService {
     return { message: 'Match deleted successfully' };
   }
 
+  static attachLiveTimer(match) {
+    if (!match) return match;
+    const TimerService = require('./timerService');
+    const matchObj = typeof match.toObject === 'function' ? match.toObject() : match;
+    if (matchObj.timer && matchObj.timer.isRunning) {
+      matchObj.timer.remainingTime = TimerService.calculateRemainingTime(matchObj);
+    }
+    return matchObj;
+  }
+
   static async getAllMatches(query = {}) {
     const filter = {};
     if (query.tournament) filter.tournament = query.tournament;
     if (query.status) filter.status = query.status;
     if (query.venue) filter.venue = { $regex: query.venue, $options: 'i' };
 
-    return Match.find(filter)
+    const matches = await Match.find(filter)
       .populate('teamA', 'name logo coach')
       .populate('teamB', 'name logo coach')
       .populate('tournament', 'name')
       .populate('winner', 'name logo')
       .sort({ matchDate: 1, matchTime: 1 });
+
+    return matches.map((m) => MatchService.attachLiveTimer(m));
   }
 
   static async getUpcomingMatches(tournamentId = null) {
     const filter = { status: MATCH_STATUS.UPCOMING };
     if (tournamentId) filter.tournament = tournamentId;
 
-    return Match.find(filter)
+    const matches = await Match.find(filter)
       .populate('teamA', 'name logo coach')
       .populate('teamB', 'name logo coach')
       .populate('tournament', 'name')
       .sort({ matchDate: 1, matchTime: 1 });
+
+    return matches.map((m) => MatchService.attachLiveTimer(m));
   }
 
   static async getLiveMatches(tournamentId = null) {
     const filter = { status: { $in: [MATCH_STATUS.LIVE, MATCH_STATUS.HALF_TIME, MATCH_STATUS.PENALTY_SHOOTOUT] } };
     if (tournamentId) filter.tournament = tournamentId;
 
-    return Match.find(filter)
+    const matches = await Match.find(filter)
       .populate('teamA', 'name logo coach')
       .populate('teamB', 'name logo coach')
       .populate('tournament', 'name')
       .sort({ matchDate: 1, matchTime: 1 });
+
+    return matches.map((m) => MatchService.attachLiveTimer(m));
   }
 
   static async getCompletedMatches(tournamentId = null) {
@@ -213,8 +229,8 @@ class MatchService {
         path: 'events',
         match: { isUndone: false },
         populate: [
-          { path: 'player', select: 'name jerseyNumber position' },
-          { path: 'secondaryPlayer', select: 'name jerseyNumber position' },
+          { path: 'player', select: 'name jerseyNumber position club' },
+          { path: 'secondaryPlayer', select: 'name jerseyNumber position club' },
           { path: 'team', select: 'name logo' }
         ]
       });
@@ -223,7 +239,7 @@ class MatchService {
       throw new Error('Match not found');
     }
 
-    return match;
+    return MatchService.attachLiveTimer(match);
   }
 
   static async getMatchesByTeam(teamId) {

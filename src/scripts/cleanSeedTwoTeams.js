@@ -46,7 +46,7 @@ async function cleanSeed() {
     // 1. Stanford Cardinal
     const stanford = await Team.create({
       name: 'Stanford Cardinal',
-      logo: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=128&q=80',
+      logo: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=128&q=80',
       description: 'Dynamic high-press offense with clinical finishing',
       coach: 'Marcus Henderson',
       seed: '#1 Seed',
@@ -61,11 +61,11 @@ async function cleanSeed() {
     });
 
     const stanfordPlayersData = [
-      { name: 'Mateo Vance', jerseyNumber: 10, club: 'Bay Area Elite SC', position: PLAYER_POSITIONS.FORWARD, isCaptain: true, goals: 0, matchesPlayed: 0 },
-      { name: 'Aaron Chen', jerseyNumber: 8, club: 'Silicon Valley FC', position: PLAYER_POSITIONS.MIDFIELDER, goals: 0, matchesPlayed: 0 },
-      { name: 'Lucas Wright', jerseyNumber: 4, club: 'Palo Alto Athletic', position: PLAYER_POSITIONS.DEFENDER, goals: 0, matchesPlayed: 0 },
-      { name: 'Marcus Cole', jerseyNumber: 7, club: 'California Strikers FC', position: PLAYER_POSITIONS.FORWARD, goals: 0, matchesPlayed: 0 },
-      { name: 'Kasper Jensen', jerseyNumber: 1, club: 'Nordic Stars Athletic', position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 0, matchesPlayed: 0 }
+      { name: 'Mateo Vance', jerseyNumber: 10, club: 'Stanford Cardinal', position: PLAYER_POSITIONS.FORWARD, isCaptain: true, goals: 0, matchesPlayed: 0 },
+      { name: 'Aaron Chen', jerseyNumber: 8, club: 'Stanford Cardinal', position: PLAYER_POSITIONS.MIDFIELDER, goals: 0, matchesPlayed: 0 },
+      { name: 'Lucas Wright', jerseyNumber: 4, club: 'Stanford Cardinal', position: PLAYER_POSITIONS.DEFENDER, goals: 0, matchesPlayed: 0 },
+      { name: 'Marcus Cole', jerseyNumber: 7, club: 'Stanford Cardinal', position: PLAYER_POSITIONS.FORWARD, goals: 0, matchesPlayed: 0 },
+      { name: 'Kasper Jensen', jerseyNumber: 1, club: 'Stanford Cardinal', position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 0, matchesPlayed: 0 }
     ];
 
     const stanfordPlayers = [];
@@ -95,11 +95,11 @@ async function cleanSeed() {
     });
 
     const uclaPlayersData = [
-      { name: 'Julian Morales', jerseyNumber: 9, club: 'SoCal Gunners FC', position: PLAYER_POSITIONS.FORWARD, isCaptain: true, goals: 0, matchesPlayed: 0 },
-      { name: 'Liam Evans', jerseyNumber: 11, club: 'Westwood City SC', position: PLAYER_POSITIONS.MIDFIELDER, goals: 0, matchesPlayed: 0 },
-      { name: 'Noah Miller', jerseyNumber: 5, club: 'Pacific Waves FC', position: PLAYER_POSITIONS.DEFENDER, goals: 0, matchesPlayed: 0 },
-      { name: 'Derrick Vance', jerseyNumber: 17, club: 'Hollywood United SC', position: PLAYER_POSITIONS.FORWARD, goals: 0, matchesPlayed: 0 },
-      { name: 'Gabriel Santos', jerseyNumber: 1, club: 'LA Premier Academy', position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 0, matchesPlayed: 0 }
+      { name: 'Julian Morales', jerseyNumber: 9, club: 'UCLA Bruins', position: PLAYER_POSITIONS.FORWARD, isCaptain: true, goals: 0, matchesPlayed: 0 },
+      { name: 'Liam Evans', jerseyNumber: 11, club: 'UCLA Bruins', position: PLAYER_POSITIONS.MIDFIELDER, goals: 0, matchesPlayed: 0 },
+      { name: 'Noah Miller', jerseyNumber: 5, club: 'UCLA Bruins', position: PLAYER_POSITIONS.DEFENDER, goals: 0, matchesPlayed: 0 },
+      { name: 'Derrick Vance', jerseyNumber: 17, club: 'UCLA Bruins', position: PLAYER_POSITIONS.FORWARD, goals: 0, matchesPlayed: 0 },
+      { name: 'Gabriel Santos', jerseyNumber: 1, club: 'UCLA Bruins', position: PLAYER_POSITIONS.GOALKEEPER, penaltiesSaved: 0, matchesPlayed: 0 }
     ];
 
     const uclaPlayers = [];

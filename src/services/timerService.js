@@ -663,6 +663,9 @@ class TimerService {
             // Stage time finished, automatically move to next stage!
             await TimerService.advanceStage(match._id);
           } else {
+            // Persist remaining time to database so all endpoints report exact authoritative second
+            await Match.updateOne({ _id: match._id }, { $set: { 'timer.remainingTime': remaining } });
+
             // Broadcast live tick to socket room
             socketEmitter.broadcastTimerUpdate(match._id, {
               matchId: match._id,
