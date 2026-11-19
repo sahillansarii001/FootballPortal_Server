@@ -1,0 +1,119 @@
+/**
+ * Football Portal Core Constants & Enums
+ */
+
+const ROLES = {
+  SUPER_ADMIN: 'Super Admin',
+  MATCH_OPERATOR: 'Match Operator',
+  PUBLIC_USER: 'Public User'
+};
+
+const TOURNAMENT_STATUS = {
+  UPCOMING: 'Upcoming',
+  ONGOING: 'Ongoing',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled'
+};
+
+const MATCH_STATUS = {
+  UPCOMING: 'Upcoming',
+  LIVE: 'Live',
+  HALF_TIME: 'Half-Time',
+  COMPLETED: 'Completed',
+  PENALTY_SHOOTOUT: 'Penalty Shootout'
+};
+
+const TIMER_STAGES = {
+  FIRST_HALF: 'First Half',
+  TRANSITION_GAP: 'Transition Gap',
+  HALF_TIME: 'Half-Time',
+  SECOND_HALF: 'Second Half',
+  COMPLETED: 'Match Completed'
+};
+
+// Durations in seconds as strictly defined in system specification
+const STAGE_DURATIONS = {
+  [TIMER_STAGES.FIRST_HALF]: 240,       // 4 minutes
+  [TIMER_STAGES.TRANSITION_GAP]: 20,    // 20 seconds whistle/leaving field
+  [TIMER_STAGES.HALF_TIME]: 120,        // 2 minutes break
+  [TIMER_STAGES.SECOND_HALF]: 240,      // 4 minutes
+  [TIMER_STAGES.COMPLETED]: 0
+};
+
+const STAGE_ORDER = [
+  TIMER_STAGES.FIRST_HALF,
+  TIMER_STAGES.TRANSITION_GAP,
+  TIMER_STAGES.HALF_TIME,
+  TIMER_STAGES.SECOND_HALF,
+  TIMER_STAGES.COMPLETED
+];
+
+const GOAL_TYPES = {
+  NORMAL: 'Normal Goal',
+  PENALTY: 'Penalty Goal',
+  OWN_GOAL: 'Own Goal'
+};
+
+const PENALTY_OUTCOMES = {
+  GOAL: 'Goal',
+  SAVED: 'Saved',
+  MISSED: 'Missed'
+};
+
+const PLAYER_POSITIONS = {
+  GOALKEEPER: 'Goalkeeper',
+  DEFENDER: 'Defender',
+  MIDFIELDER: 'Midfielder',
+  FORWARD: 'Forward'
+};
+
+// Standardized Match Event Types for centralized match event history
+const EVENT_TYPES = {
+  MATCH_STARTED: 'MATCH_STARTED',
+  TIMER_STARTED: 'TIMER_STARTED',
+  TIMER_PAUSED: 'TIMER_PAUSED',
+  TIMER_RESUMED: 'TIMER_RESUMED',
+  TIMER_RESET: 'TIMER_RESET',
+  FIRST_HALF_ENDED: 'FIRST_HALF_ENDED',
+  TRANSITION_STARTED: 'TRANSITION_STARTED',
+  HALFTIME_STARTED: 'HALFTIME_STARTED',
+  SECOND_HALF_STARTED: 'SECOND_HALF_STARTED',
+  GOAL_SCORED: 'GOAL_SCORED',
+  GOAL_REMOVED: 'GOAL_REMOVED',
+  PENALTY_TAKEN: 'PENALTY_TAKEN',
+  PENALTY_SAVED: 'PENALTY_SAVED',
+  PENALTY_MISSED: 'PENALTY_MISSED',
+  MATCH_COMPLETED: 'MATCH_COMPLETED',
+  SHOOTOUT_COMPLETED: 'SHOOTOUT_COMPLETED',
+
+  // Aliases for backward compatibility
+  GOAL: 'GOAL_SCORED',
+  GOAL_UNDONE: 'GOAL_REMOVED',
+  PENALTY_KICK: 'PENALTY_TAKEN',
+  STAGE_CHANGE: 'STAGE_CHANGE',
+  TIMER_START: 'TIMER_STARTED',
+  TIMER_PAUSE: 'TIMER_PAUSED',
+  TIMER_RESUME: 'TIMER_RESUMED'
+};
+
+const POINTS = {
+  WIN: 3,
+  LOSS: 0
+};
+
+const DEFAULT_INITIAL_PENALTY_KICKS = 5;
+
+module.exports = {
+  ROLES,
+  TOURNAMENT_STATUS,
+  MATCH_STATUS,
+  TIMER_STAGES,
+  STAGE_DURATIONS,
+  STAGE_ORDER,
+  GOAL_TYPES,
+  PENALTY_OUTCOMES,
+  PLAYER_POSITIONS,
+  EVENT_TYPES,
+  POINTS,
+  DEFAULT_INITIAL_PENALTY_KICKS
+};

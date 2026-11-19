@@ -1,0 +1,148 @@
+const express = require('express');
+const router = express.Router();
+const matchController = require('../controllers/matchController');
+const matchTimerController = require('../controllers/matchTimerController');
+const goalController = require('../controllers/goalController');
+const penaltyController = require('../controllers/penaltyController');
+const summaryController = require('../controllers/summaryController');
+
+const authenticate = require('../middleware/authMiddleware');
+const authorize = require('../middleware/roleMiddleware');
+const validate = require('../middleware/validateMiddleware');
+
+const { scheduleMatchSchema, updateMatchSchema } = require('../validators/matchValidators');
+const { recordGoalSchema, updateGoalSchema } = require('../validators/goalValidators');
+const { recordPenaltySchema } = require('../validators/penaltyValidators');
+const { ROLES } = require('../utils/constants');
+
+// ==========================================
+// Match Queries (Public)
+// ==========================================
+router.get('/', matchController.getAllMatches);
+router.get('/upcoming', matchController.getUpcomingMatches);
+router.get('/live', matchController.getLiveMatches);
+router.get('/completed', matchController.getCompletedMatches);
+router.get('/team/:teamId', matchController.getMatchesByTeam);
+
+// Unified authoritative live match state (Frontend integration)
+router.get('/:id/live', matchController.getLiveMatchState);
+
+// Match Events & Timeline routes
+router.get('/:id/events', matchController.getMatchEvents);
+router.get('/:id/timeline', matchController.getMatchTimeline);
+
+router.get('/:id', matchController.getMatchById);
+
+// ==========================================
+// Match Scheduling (Super Admin)
+// ==========================================
+router.post(
+  '/',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN),
+  validate(scheduleMatchSchema),
+  matchController.scheduleMatch
+);
+
+router.put(
+  '/:id',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN),
+  validate(updateMatchSchema),
+  matchController.updateMatch
+);
+
+router.delete(
+  '/:id',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN),
+  matchController.deleteMatch
+);
+
+// ==========================================
+// Live Match Timer Routes
+// ==========================================
+router.get('/:id/timer', matchTimerController.getTimerStatus);
+
+router.post(
+  '/:id/timer/start',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  matchTimerController.startTimer
+);
+
+router.post(
+  '/:id/timer/pause',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  matchTimerController.pauseTimer
+);
+
+router.post(
+  '/:id/timer/resume',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  matchTimerController.resumeTimer
+);
+
+router.post(
+  '/:id/timer/advance',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  matchTimerController.advanceStage
+);
+
+router.post(
+  '/:id/timer/reset',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN),
+  matchTimerController.resetTimer
+);
+
+// ==========================================
+// Goal Management Routes
+// ==========================================
+router.get('/:id/goals', goalController.getMatchGoals);
+
+router.post(
+  '/:id/goals',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  validate(recordGoalSchema),
+  goalController.recordGoal
+);
+
+router.post(
+  '/:id/goals/undo',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  goalController.undoGoal
+);
+
+router.put(
+  '/:id/goals/:eventId',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  validate(updateGoalSchema),
+  goalController.editGoal
+);
+
+// ==========================================
+// Penalty Shootout Routes
+// ==========================================
+router.get('/:id/penalties', penaltyController.getMatchPenalties);
+
+router.post(
+  '/:id/penalties',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  validate(recordPenaltySchema),
+  penaltyController.recordPenalty
+);
+
+// ==========================================
+// Match Summary Route
+// ==========================================
+router.get('/:id/summary', summaryController.getMatchSummary);
+
+module.exports = router;
