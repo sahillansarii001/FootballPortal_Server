@@ -188,7 +188,11 @@ class TimerService {
       throw new Error('Match not found');
     }
 
-    if (!match.timer.isRunning || !match.timer.isPaused) {
+    if (!match.timer.isRunning) {
+      return TimerService.startTimer(matchId, userId);
+    }
+
+    if (!match.timer.isPaused) {
       return match;
     }
 
