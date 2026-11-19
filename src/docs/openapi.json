@@ -1,0 +1,502 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Football Tournament Management Portal API",
+    "version": "1.0.0",
+    "description": "Production-ready backend API for Football Tournament Management Portal. Supports 4m/2m/4m halves, 2m Extra Time, 3-kick penalty shootouts, and Toss-based sudden death resolution."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000/api",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "summary": "User & Admin Login",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "example": "admin@footballportal.com" },
+                  "password": { "type": "string", "example": "AdminPass123!" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Authentication successful" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Get Current Authenticated Profile",
+        "tags": ["Authentication"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Authenticated user profile" }
+        }
+      }
+    },
+    "/matches": {
+      "get": {
+        "summary": "List All Matches",
+        "tags": ["Matches"],
+        "responses": {
+          "200": { "description": "Array of matches" }
+        }
+      },
+      "post": {
+        "summary": "Schedule a New Match",
+        "tags": ["Matches"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tournament", "matchNumber", "teamA", "teamB", "matchDate", "matchTime", "venue"],
+                "properties": {
+                  "tournament": { "type": "string" },
+                  "matchNumber": { "type": "number" },
+                  "teamA": { "type": "string" },
+                  "teamB": { "type": "string" },
+                  "matchDate": { "type": "string" },
+                  "matchTime": { "type": "string" },
+                  "venue": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Match scheduled successfully" }
+        }
+      }
+    },
+    "/matches/live": {
+      "get": {
+        "summary": "List Currently Live Matches",
+        "tags": ["Matches"],
+        "responses": {
+          "200": { "description": "Array of live matches" }
+        }
+      }
+    },
+    "/matches/upcoming": {
+      "get": {
+        "summary": "List Scheduled Upcoming Matches",
+        "tags": ["Matches"],
+        "responses": {
+          "200": { "description": "Array of upcoming matches" }
+        }
+      }
+    },
+    "/matches/completed": {
+      "get": {
+        "summary": "List Completed Matches & Results",
+        "tags": ["Matches"],
+        "responses": {
+          "200": { "description": "Array of completed matches" }
+        }
+      }
+    },
+    "/matches/{id}": {
+      "get": {
+        "summary": "Get Match Details by ID",
+        "tags": ["Matches"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Match details" }
+        }
+      }
+    },
+    "/matches/{id}/timer/start": {
+      "post": {
+        "summary": "Start or Resume Match Timer",
+        "tags": ["Match Timer Controls"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Timer started" }
+        }
+      }
+    },
+    "/matches/{id}/timer/pause": {
+      "post": {
+        "summary": "Pause Match Timer",
+        "tags": ["Match Timer Controls"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Timer paused" }
+        }
+      }
+    },
+    "/matches/{id}/timer/resume": {
+      "post": {
+        "summary": "Resume Paused Match Timer",
+        "tags": ["Match Timer Controls"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Timer resumed" }
+        }
+      }
+    },
+    "/matches/{id}/timer/advance": {
+      "post": {
+        "summary": "Advance Match to Next Regulatory Stage",
+        "tags": ["Match Timer Controls"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Stage advanced" }
+        }
+      }
+    },
+    "/matches/{id}/timer/reset": {
+      "post": {
+        "summary": "Reset Match Timer",
+        "tags": ["Match Timer Controls"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Timer reset" }
+        }
+      }
+    },
+    "/matches/{id}/timer/add-time": {
+      "post": {
+        "summary": "Add Extra Time to Match Clock",
+        "tags": ["Match Timer Controls"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "seconds": { "type": "number", "example": 120 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Time added" }
+        }
+      }
+    },
+    "/matches/{id}/goal": {
+      "post": {
+        "summary": "Record Goal for a Match",
+        "tags": ["Goal Management"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["team"],
+                "properties": {
+                  "team": { "type": "string" },
+                  "player": { "type": "string" },
+                  "goalType": { "type": "string", "enum": ["Normal Goal", "Penalty Goal", "Own Goal"] },
+                  "matchTime": { "type": "string" },
+                  "description": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Goal recorded successfully" }
+        }
+      }
+    },
+    "/matches/{id}/goals": {
+      "get": {
+        "summary": "List All Recorded Goals for Match",
+        "tags": ["Goal Management"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "List of goals" }
+        }
+      }
+    },
+    "/matches/{id}/goal/{eventId}": {
+      "delete": {
+        "summary": "Undo / Remove Recorded Goal (VAR Correction)",
+        "tags": ["Goal Management"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "eventId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Goal removed and stats adjusted" }
+        }
+      },
+      "put": {
+        "summary": "Edit Recorded Goal Details",
+        "tags": ["Goal Management"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "eventId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "player": { "type": "string" },
+                  "goalType": { "type": "string" },
+                  "matchTime": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Goal updated" }
+        }
+      }
+    },
+    "/matches/{id}/penalties": {
+      "get": {
+        "summary": "Get Penalty Shootout History for Match",
+        "tags": ["Penalty Shootout"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Penalty attempts history" }
+        }
+      },
+      "post": {
+        "summary": "Record Individual Penalty Attempt",
+        "tags": ["Penalty Shootout"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["team", "player", "outcome"],
+                "properties": {
+                  "team": { "type": "string" },
+                  "player": { "type": "string" },
+                  "goalkeeper": { "type": "string" },
+                  "outcome": { "type": "string", "enum": ["Goal", "Saved", "Missed"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Penalty kick recorded" }
+        }
+      }
+    },
+    "/matches/{id}/toss": {
+      "post": {
+        "summary": "Record Sudden Death Coin Toss Result & Choice",
+        "tags": ["Sudden Death Coin Toss"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tossWinner", "choice"],
+                "properties": {
+                  "tossWinner": { "type": "string", "description": "Team ID or 'A' / 'B'" },
+                  "choice": { "type": "string", "enum": ["ATTACK", "DEFEND", "SHOOT", "SAVE"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Toss recorded" }
+        }
+      }
+    },
+    "/matches/{id}/toss/decisive-kick": {
+      "post": {
+        "summary": "Execute Decisive Sudden Death Penalty Kick",
+        "tags": ["Sudden Death Coin Toss"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["player", "outcome"],
+                "properties": {
+                  "player": { "type": "string" },
+                  "goalkeeper": { "type": "string" },
+                  "outcome": { "type": "string", "enum": ["GOAL", "SAVED", "MISSED"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Championship match resolved" }
+        }
+      }
+    },
+    "/matches/{id}/finalize": {
+      "post": {
+        "summary": "Finalize Match and Commit Points to Table",
+        "tags": ["Matches"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Match finalized" }
+        }
+      }
+    },
+    "/leaderboard/top-scorers": {
+      "get": {
+        "summary": "Get Top Goal Scorers (Golden Boot Rankings)",
+        "tags": ["Leaderboard & Standings"],
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "number", "default": 10 } }
+        ],
+        "responses": {
+          "200": { "description": "List of top scorers" }
+        }
+      }
+    },
+    "/standings/{tournamentId}": {
+      "get": {
+        "summary": "Get Tournament Standings / Points Table",
+        "tags": ["Leaderboard & Standings"],
+        "parameters": [
+          { "name": "tournamentId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Standings point table" }
+        }
+      }
+    },
+    "/teams": {
+      "get": {
+        "summary": "Get All Teams",
+        "tags": ["Teams"],
+        "responses": { "200": { "description": "Array of teams" } }
+      },
+      "post": {
+        "summary": "Register New Team",
+        "tags": ["Teams"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "coach"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "coach": { "type": "string" },
+                  "conference": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Team registered" } }
+      }
+    },
+    "/players": {
+      "get": {
+        "summary": "Get All Players",
+        "tags": ["Players"],
+        "responses": { "200": { "description": "Array of players" } }
+      },
+      "post": {
+        "summary": "Register New Player",
+        "tags": ["Players"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "jerseyNumber", "team"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "jerseyNumber": { "type": "number" },
+                  "team": { "type": "string" },
+                  "position": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Player registered" } }
+      }
+    }
+  }
+}
