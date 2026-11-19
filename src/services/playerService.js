@@ -2,11 +2,36 @@ const Player = require('../models/Player');
 const Team = require('../models/Team');
 const MatchEvent = require('../models/MatchEvent');
 
+function escapeRegex(text) {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
 class PlayerService {
   static async createPlayer(data) {
     const team = await Team.findById(data.team);
     if (!team) {
-      throw new Error('Team not found');
+      const err = new Error('Team not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const trimmedName = (data.name || '').trim();
+    if (!trimmedName) {
+      const err = new Error('Player name is required');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Check duplicate player name in team
+    const existingPlayer = await Player.findOne({
+      team: data.team,
+      name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') }
+    });
+
+    if (existingPlayer) {
+      const err = new Error(`Player with name "${trimmedName}" already exists in ${team.name}`);
+      err.statusCode = 400;
+      throw err;
     }
 
     const existingJersey = await Player.findOne({
@@ -15,10 +40,16 @@ class PlayerService {
     });
 
     if (existingJersey) {
-      throw new Error(`Jersey number ${data.jerseyNumber} is already assigned in ${team.name}`);
+      const err = new Error(`Jersey number ${data.jerseyNumber} is already assigned in ${team.name}`);
+      err.statusCode = 400;
+      throw err;
     }
 
-    const player = await Player.create(data);
+    const player = await Player.create({
+      ...data,
+      name: trimmedName,
+      club: (data.club || '').trim() || 'Independent Club'
+    });
 
     // Add player to team's players array
     await Team.findByIdAndUpdate(data.team, {
@@ -31,11 +62,29 @@ class PlayerService {
   static async updatePlayer(id, updateData) {
     const player = await Player.findById(id);
     if (!player) {
-      throw new Error('Player not found');
+      const err = new Error('Player not found');
+      err.statusCode = 404;
+      throw err;
     }
 
     const targetTeam = updateData.team || player.team;
     const targetJersey = updateData.jerseyNumber || player.jerseyNumber;
+    const trimmedName = updateData.name ? updateData.name.trim() : null;
+
+    if (trimmedName && trimmedName.toLowerCase() !== player.name.toLowerCase()) {
+      const existingPlayer = await Player.findOne({
+        _id: { $ne: id },
+        team: targetTeam,
+        name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') }
+      });
+
+      if (existingPlayer) {
+        const err = new Error(`Player with name "${trimmedName}" already exists in this team`);
+        err.statusCode = 400;
+        throw err;
+      }
+      updateData.name = trimmedName;
+    }
 
     if (
       (updateData.jerseyNumber && updateData.jerseyNumber !== player.jerseyNumber) ||
@@ -48,7 +97,9 @@ class PlayerService {
       });
 
       if (existing) {
-        throw new Error(`Jersey number ${targetJersey} is already assigned in that team`);
+        const err = new Error(`Jersey number ${targetJersey} is already assigned in that team`);
+        err.statusCode = 400;
+        throw err;
       }
     }
 

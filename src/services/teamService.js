@@ -2,14 +2,29 @@ const Team = require('../models/Team');
 const Player = require('../models/Player');
 const Match = require('../models/Match');
 
+function escapeRegex(text) {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
 class TeamService {
   static async createTeam(data) {
-    const existing = await Team.findOne({ name: { $regex: `^${data.name}$`, $options: 'i' } });
-    if (existing) {
-      throw new Error(`Team with name "${data.name}" already exists`);
+    const trimmedName = (data.name || '').trim();
+    if (!trimmedName) {
+      const err = new Error('Team name is required');
+      err.statusCode = 400;
+      throw err;
     }
 
-    const payload = { ...data };
+    const existing = await Team.findOne({
+      name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') }
+    });
+    if (existing) {
+      const err = new Error(`Team with name "${trimmedName}" already exists`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const payload = { ...data, name: trimmedName };
     if (payload.captain && typeof payload.captain === 'string' && !/^[0-9a-fA-F]{24}$/.test(payload.captain)) {
       payload.captainName = payload.captain.trim();
       delete payload.captain;
@@ -22,14 +37,23 @@ class TeamService {
   static async updateTeam(id, updateData) {
     const team = await Team.findById(id);
     if (!team) {
-      throw new Error('Team not found');
+      const err = new Error('Team not found');
+      err.statusCode = 404;
+      throw err;
     }
 
-    if (updateData.name && updateData.name.toLowerCase() !== team.name.toLowerCase()) {
-      const existing = await Team.findOne({ name: { $regex: `^${updateData.name}$`, $options: 'i' } });
+    if (updateData.name && updateData.name.trim().toLowerCase() !== team.name.toLowerCase()) {
+      const trimmedName = updateData.name.trim();
+      const existing = await Team.findOne({
+        _id: { $ne: id },
+        name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') }
+      });
       if (existing) {
-        throw new Error(`Team with name "${updateData.name}" already exists`);
+        const err = new Error(`Team with name "${trimmedName}" already exists`);
+        err.statusCode = 400;
+        throw err;
       }
+      updateData.name = trimmedName;
     }
 
     const payload = { ...updateData };
@@ -73,7 +97,8 @@ class TeamService {
     }
 
     return Team.find(filter)
-      .populate('captain', 'name jerseyNumber')
+      .populate('captain', 'name jerseyNumber position')
+      .populate('players')
       .sort({ totalPoints: -1, goalDifference: -1, goalsScored: -1 });
   }
 

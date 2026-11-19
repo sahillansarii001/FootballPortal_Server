@@ -29,6 +29,7 @@ const TIMER_STAGES = {
   HALF_TIME: 'Half-Time',
   SECOND_HALF: 'Second Half',
   EXTRA_TIME: 'Extra Time',
+  PENALTY_SHOOTOUT: 'Penalty Shootout',
   COMPLETED: 'Match Completed'
 };
 
@@ -39,6 +40,7 @@ const STAGE_DURATIONS = {
   [TIMER_STAGES.HALF_TIME]: 120,        // 2 minutes break
   [TIMER_STAGES.SECOND_HALF]: 240,      // 4 minutes
   [TIMER_STAGES.EXTRA_TIME]: 120,       // 2 minutes extra time for draw decider
+  [TIMER_STAGES.PENALTY_SHOOTOUT]: 0,
   [TIMER_STAGES.COMPLETED]: 0
 };
 
@@ -48,6 +50,7 @@ const STAGE_ORDER = [
   TIMER_STAGES.HALF_TIME,
   TIMER_STAGES.SECOND_HALF,
   TIMER_STAGES.EXTRA_TIME,
+  TIMER_STAGES.PENALTY_SHOOTOUT,
   TIMER_STAGES.COMPLETED
 ];
 

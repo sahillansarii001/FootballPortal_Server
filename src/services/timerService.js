@@ -396,7 +396,11 @@ class TimerService {
           nextStage = TIMER_STAGES.COMPLETED;
         }
       } else if (currentStage === TIMER_STAGES.EXTRA_TIME) {
-        nextStage = TIMER_STAGES.COMPLETED;
+        if (match.teamAScore === match.teamBScore) {
+          nextStage = TIMER_STAGES.PENALTY_SHOOTOUT;
+        } else {
+          nextStage = TIMER_STAGES.COMPLETED;
+        }
       } else {
         return match;
       }
@@ -435,6 +439,32 @@ class TimerService {
         } else if (nextStage === TIMER_STAGES.SECOND_HALF && tournament.rules.halfDurationSeconds) {
           nextStageDuration = tournament.rules.halfDurationSeconds;
         }
+      }
+
+      // Check if next stage is Penalty Shootout (e.g. after tied 2-minute Extra Time)
+      if (nextStage === TIMER_STAGES.PENALTY_SHOOTOUT) {
+        match.timer.currentStage = TIMER_STAGES.PENALTY_SHOOTOUT;
+        match.timer.stageDuration = 0;
+        match.timer.remainingTime = 0;
+        match.timer.isRunning = false;
+        match.timer.isPaused = false;
+        match.status = MATCH_STATUS.PENALTY_SHOOTOUT;
+        match.shootout = match.shootout || {};
+        match.shootout.isShootout = true;
+        match.matchResult = 'Extra Time Draw - Penalty Shootout Active';
+        await match.save();
+
+        socketEmitter.broadcastStageChange(matchId, {
+          matchId,
+          previousStage: currentStage,
+          currentStage: TIMER_STAGES.PENALTY_SHOOTOUT,
+          status: MATCH_STATUS.PENALTY_SHOOTOUT,
+          teamAScore: match.teamAScore,
+          teamBScore: match.teamBScore,
+          needsShootout: true
+        });
+
+        return match;
       }
 
       // Check if next stage is Match Completed
