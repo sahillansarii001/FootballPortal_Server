@@ -59,7 +59,28 @@ class TimerService {
     }
 
     if (match.status === MATCH_STATUS.COMPLETED) {
-      throw new Error('Cannot start timer for an already completed match');
+      // Re-opening/restarting a completed match: reset scores, shootout, and finalize flag
+      match.status = MATCH_STATUS.UPCOMING;
+      match.isFinalized = false;
+      match.teamAScore = 0;
+      match.teamBScore = 0;
+      match.winner = null;
+      match.matchResult = '';
+      match.goals = [];
+      match.shootout = {
+        isShootout: false,
+        teamAPenaltyScore: 0,
+        teamBPenaltyScore: 0,
+        teamAPenaltiesTaken: 0,
+        teamBPenaltiesTaken: 0,
+        round: 0,
+        isSuddenDeath: false,
+        isCompleted: false,
+        shootoutWinner: null
+      };
+      if (match.tournament) {
+        await StandingsService.recalculateTournamentStandings(match.tournament);
+      }
     }
 
     // If currently paused, resume it
@@ -249,6 +270,23 @@ class TimerService {
     const halfDuration = tournament?.rules?.halfDurationSeconds || STAGE_DURATIONS[TIMER_STAGES.FIRST_HALF];
 
     match.status = MATCH_STATUS.UPCOMING;
+    match.isFinalized = false;
+    match.teamAScore = 0;
+    match.teamBScore = 0;
+    match.winner = null;
+    match.matchResult = '';
+    match.goals = [];
+    match.shootout = {
+      isShootout: false,
+      teamAPenaltyScore: 0,
+      teamBPenaltyScore: 0,
+      teamAPenaltiesTaken: 0,
+      teamBPenaltiesTaken: 0,
+      round: 0,
+      isSuddenDeath: false,
+      isCompleted: false,
+      shootoutWinner: null
+    };
     match.timer.currentStage = TIMER_STAGES.FIRST_HALF;
     match.timer.stageDuration = halfDuration;
     match.timer.remainingTime = halfDuration;
@@ -260,6 +298,10 @@ class TimerService {
     match.timer.stageHistory = [];
 
     await match.save();
+
+    if (match.tournament) {
+      await StandingsService.recalculateTournamentStandings(match.tournament);
+    }
 
     // Record event
     const event = await MatchEvent.create({

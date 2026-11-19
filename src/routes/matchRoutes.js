@@ -62,14 +62,14 @@ router.delete(
 router.post(
   '/:id/end',
   authenticate,
-  authorize(ROLES.SUPER_ADMIN),
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
   matchController.endMatch
 );
 
 router.post(
   '/:id/finalize',
   authenticate,
-  authorize(ROLES.SUPER_ADMIN),
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
   matchController.endMatch
 );
 
@@ -130,7 +130,7 @@ router.post(
 router.post(
   '/:id/timer/reset',
   authenticate,
-  authorize(ROLES.SUPER_ADMIN),
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
   matchTimerController.resetTimer
 );
 

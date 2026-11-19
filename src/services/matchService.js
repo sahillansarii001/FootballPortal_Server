@@ -96,7 +96,9 @@ class MatchService {
     }
 
     if (match.status === MATCH_STATUS.COMPLETED && updateData.status !== MATCH_STATUS.COMPLETED) {
-      throw new Error('Cannot modify a completed match');
+      if (updateData.status === MATCH_STATUS.UPCOMING || updateData.status === MATCH_STATUS.LIVE) {
+        match.isFinalized = false;
+      }
     }
 
     // If date or time is modified, check collision
