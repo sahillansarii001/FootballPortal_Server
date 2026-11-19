@@ -86,6 +86,13 @@ router.post(
 );
 
 router.post(
+  '/:id/start',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  matchTimerController.startTimer
+);
+
+router.post(
   '/:id/timer/pause',
   authenticate,
   authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
@@ -93,7 +100,21 @@ router.post(
 );
 
 router.post(
+  '/:id/pause',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  matchTimerController.pauseTimer
+);
+
+router.post(
   '/:id/timer/resume',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  matchTimerController.resumeTimer
+);
+
+router.post(
+  '/:id/resume',
   authenticate,
   authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
   matchTimerController.resumeTimer
@@ -111,6 +132,13 @@ router.post(
   authenticate,
   authorize(ROLES.SUPER_ADMIN),
   matchTimerController.resetTimer
+);
+
+router.post(
+  '/:id/timer/add-time',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  matchTimerController.addTime
 );
 
 // ==========================================

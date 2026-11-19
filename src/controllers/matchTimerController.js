@@ -83,11 +83,25 @@ const advanceStage = asyncHandler(async (req, res) => {
   });
 });
 
+const addTime = asyncHandler(async (req, res) => {
+  const seconds = req.body.seconds || 120;
+  const match = await TimerService.addTime(req.params.id, seconds, req.user?._id);
+  const remainingTime = TimerService.calculateRemainingTime(match);
+  return ApiResponse.success(res, 'Extra time added successfully', {
+    matchId: match._id,
+    timer: {
+      ...match.timer.toObject(),
+      remainingTime
+    }
+  });
+});
+
 module.exports = {
   getTimerStatus,
   startTimer,
   pauseTimer,
   resumeTimer,
   resetTimer,
-  advanceStage
+  advanceStage,
+  addTime
 };

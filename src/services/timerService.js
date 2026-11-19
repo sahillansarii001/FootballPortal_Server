@@ -284,6 +284,40 @@ class TimerService {
   }
 
   /**
+   * Add extra time (e.g. 2 minutes for draw decider or custom seconds) to timer
+   */
+  static async addTime(matchId, secondsToAdd = 120, userId = null) {
+    const match = await Match.findById(matchId);
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    const currentRemaining = TimerService.calculateRemainingTime(match);
+    const newRemaining = currentRemaining + Number(secondsToAdd);
+    match.timer.remainingTime = newRemaining;
+    match.timer.stageDuration = (match.timer.stageDuration || 0) + Number(secondsToAdd);
+
+    if (!match.timer.isRunning) {
+      match.timer.isRunning = true;
+      match.timer.isPaused = false;
+      match.timer.startedTimestamp = new Date();
+    }
+
+    await match.save();
+
+    socketEmitter.broadcastTimerEvent(matchId, 'timer:updated', {
+      matchId,
+      currentStage: match.timer.currentStage,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      isRunning: match.timer.isRunning,
+      isPaused: match.timer.isPaused
+    });
+
+    return match;
+  }
+
+  /**
    * Automatically transition to next stage when stage time expires
    */
   static async advanceStage(matchId) {

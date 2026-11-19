@@ -104,7 +104,7 @@ const POINTS = {
   LOSS: 0
 };
 
-const DEFAULT_INITIAL_PENALTY_KICKS = 5;
+const DEFAULT_INITIAL_PENALTY_KICKS = 3;
 
 module.exports = {
   ROLES,
