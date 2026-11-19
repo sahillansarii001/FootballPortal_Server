@@ -79,9 +79,14 @@ class PenaltyService {
       }
 
       const taker = await Player.findById(playerId).session(session);
-      const goalkeeper = await Player.findById(goalkeeperId).session(session);
-      if (!taker || !goalkeeper) {
-        throw new Error('Penalty taker or goalkeeper player record not found');
+      let goalkeeper = goalkeeperId ? await Player.findById(goalkeeperId).session(session) : null;
+      if (!goalkeeper) {
+        const opposingTeamId = isTeamA ? match.teamB : match.teamA;
+        goalkeeper = (await Player.findOne({ team: opposingTeamId, position: 'Goalkeeper' }).session(session))
+          || (await Player.findOne({ team: opposingTeamId }).session(session));
+      }
+      if (!taker) {
+        throw new Error('Penalty taker player record not found');
       }
 
       const tournament = await Tournament.findById(match.tournament).session(session);
@@ -102,7 +107,7 @@ class PenaltyService {
             tournament: match.tournament,
             team: teamId,
             player: playerId,
-            goalkeeper: goalkeeperId,
+            goalkeeper: goalkeeper?._id || goalkeeperId,
             penaltyNumber,
             round: currentRound,
             outcome,
