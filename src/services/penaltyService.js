@@ -1,4 +1,5 @@
 const PenaltyShootout = require('../models/PenaltyShootout');
+const TossRecord = require('../models/TossRecord');
 const Match = require('../models/Match');
 const Player = require('../models/Player');
 const Tournament = require('../models/Tournament');
@@ -271,6 +272,251 @@ class PenaltyService {
       status: match?.status,
       winner: match?.winner
     };
+  }
+
+  /**
+   * Record Coin Toss for Sudden Death (when tied after 3 kicks)
+   */
+  static async recordToss(matchId, tossData, userId = null) {
+    const match = await Match.findById(matchId);
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    let winnerId = tossData.tossWinner;
+    if (winnerId === 'A' || winnerId === 'teamA') {
+      winnerId = match.teamA.toString();
+    } else if (winnerId === 'B' || winnerId === 'teamB') {
+      winnerId = match.teamB.toString();
+    }
+
+    const isTeamA = match.teamA.toString() === winnerId?.toString();
+    const isTeamB = match.teamB.toString() === winnerId?.toString();
+    if (!isTeamA && !isTeamB) {
+      throw new Error('Toss winner must be one of the participating teams');
+    }
+
+    let rawChoice = (tossData.choice || 'ATTACK').toUpperCase();
+    if (rawChoice === 'SHOOT') rawChoice = 'ATTACK';
+    if (rawChoice === 'SAVE') rawChoice = 'DEFEND';
+    if (!['ATTACK', 'DEFEND'].includes(rawChoice)) {
+      throw new Error("Choice must be 'ATTACK' (SHOOT) or 'DEFEND' (SAVE)");
+    }
+
+    const kickingTeam = rawChoice === 'ATTACK' ? winnerId : (isTeamA ? match.teamB : match.teamA);
+    const defendingTeam = kickingTeam.toString() === match.teamA.toString() ? match.teamB : match.teamA;
+
+    match.toss = {
+      isTossConducted: true,
+      tossWinner: winnerId,
+      choice: rawChoice,
+      kickingTeam,
+      defendingTeam,
+      conductedAt: new Date()
+    };
+    match.shootout.isSuddenDeath = true;
+    match.shootout.isShootout = true;
+    match.status = MATCH_STATUS.PENALTY_SHOOTOUT;
+
+    await match.save();
+
+    await TossRecord.create({
+      match: match._id,
+      tournament: match.tournament,
+      tossWinner: winnerId,
+      choice: rawChoice,
+      kickingTeam,
+      defendingTeam,
+      conductedBy: userId
+    });
+
+    const tossEvent = await MatchEvent.create({
+      match: match._id,
+      tournament: match.tournament,
+      type: EVENT_TYPES.TOSS_CONDUCTED,
+      stage: 'Sudden Death Coin Toss',
+      matchTime: 'Sudden Death',
+      timestamp: new Date(),
+      detail: {
+        tossWinner: winnerId,
+        choice: rawChoice,
+        kickingTeam,
+        defendingTeam
+      },
+      createdBy: userId
+    });
+    match.events.push(tossEvent._id);
+    await match.save();
+
+    socketEmitter.broadcastTossCompleted(matchId, {
+      matchId,
+      tossWinner: winnerId,
+      choice: rawChoice,
+      kickingTeam,
+      defendingTeam
+    });
+
+    return match;
+  }
+
+  /**
+   * Record the single decisive sudden-death penalty kick
+   */
+  static async recordDecisiveKick(matchId, kickData, userId = null) {
+    return await withTransaction(async (session) => {
+      const match = await Match.findById(matchId).session(session);
+      if (!match) {
+        throw new Error('Match not found');
+      }
+
+      if (!match.toss || !match.toss.isTossConducted) {
+        throw new Error('Coin toss must be conducted before decisive sudden-death kick');
+      }
+
+      const kickingTeamId = match.toss.kickingTeam;
+      const defendingTeamId = match.toss.defendingTeam;
+
+      let outcome = (kickData.outcome || 'GOAL').toUpperCase();
+      if (outcome === 'GOAL') outcome = 'Goal';
+      else if (outcome === 'SAVED') outcome = 'Saved';
+      else if (outcome === 'MISSED') outcome = 'Missed';
+
+      const taker = await Player.findById(kickData.player).session(session);
+      if (!taker) {
+        throw new Error('Kicking player not found');
+      }
+
+      let goalkeeper = kickData.goalkeeper ? await Player.findById(kickData.goalkeeper).session(session) : null;
+      if (!goalkeeper) {
+        goalkeeper = (await Player.findOne({ team: defendingTeamId, position: 'Goalkeeper' }).session(session))
+          || (await Player.findOne({ team: defendingTeamId }).session(session));
+      }
+
+      // Update statistics: CRITICAL: Shootout/sudden-death kicks update penaltiesScored/Saved, NEVER goals!
+      if (outcome === 'Goal') {
+        taker.penaltiesScored += 1;
+        await taker.save({ session });
+      } else if (outcome === 'Saved' && goalkeeper) {
+        goalkeeper.penaltiesSaved += 1;
+        await goalkeeper.save({ session });
+      }
+
+      // Record PenaltyShootout attempt
+      const totalPenaltiesCount = await PenaltyShootout.countDocuments({ match: matchId }).session(session);
+      const penalties = await PenaltyShootout.create(
+        [
+          {
+            match: match._id,
+            tournament: match.tournament,
+            team: kickingTeamId,
+            player: taker._id,
+            goalkeeper: goalkeeper?._id,
+            penaltyNumber: totalPenaltiesCount + 1,
+            round: 4,
+            outcome,
+            isSuddenDeath: true,
+            timestamp: new Date()
+          }
+        ],
+        { session }
+      );
+
+      // Determine Championship Winner:
+      // If kicking team scored -> kicking team wins!
+      // If kicking team missed or goalkeeper saved -> defending team wins!
+      const winningTeamId = outcome === 'Goal' ? kickingTeamId : defendingTeamId;
+
+      if (kickingTeamId.toString() === match.teamA.toString()) {
+        match.shootout.teamAPenaltiesTaken += 1;
+        if (outcome === 'Goal') match.shootout.teamAPenaltyScore += 1;
+      } else {
+        match.shootout.teamBPenaltiesTaken += 1;
+        if (outcome === 'Goal') match.shootout.teamBPenaltyScore += 1;
+      }
+
+      match.toss.decisivePenaltyTaker = taker._id;
+      match.toss.decisiveGoalkeeper = goalkeeper?._id;
+      match.toss.decisiveOutcome = outcome.toUpperCase();
+      match.toss.winner = winningTeamId;
+      match.toss.completedAt = new Date();
+
+      match.shootout.isCompleted = true;
+      match.shootout.isSuddenDeath = true;
+      match.shootout.shootoutWinner = winningTeamId;
+      match.winner = winningTeamId;
+      match.status = MATCH_STATUS.COMPLETED;
+      match.isFinalized = true;
+      match.matchResult = `Sudden Death Decided (${outcome === 'Goal' ? 'Sudden Death Goal' : 'Decisive Penalty Save'})`;
+
+      await match.save({ session });
+
+      // Update TossRecord with outcome
+      await TossRecord.findOneAndUpdate(
+        { match: matchId },
+        {
+          decisivePenaltyTaker: taker._id,
+          decisiveGoalkeeper: goalkeeper?._id,
+          decisiveOutcome: outcome.toUpperCase(),
+          winner: winningTeamId
+        },
+        { session }
+      );
+
+      // Finalize standings
+      await TimerService.finalizeMatch(match._id);
+
+      const suddenDeathEvent = await MatchEvent.create(
+        [
+          {
+            match: match._id,
+            tournament: match.tournament,
+            type: EVENT_TYPES.SUDDEN_DEATH_DECIDED,
+            stage: 'Sudden Death Decisive Kick',
+            matchTime: 'Sudden Death',
+            timestamp: new Date(),
+            detail: {
+              kickingTeam: kickingTeamId,
+              defendingTeam: defendingTeamId,
+              taker: taker._id,
+              outcome,
+              winner: winningTeamId
+            },
+            createdBy: userId
+          }
+        ],
+        { session }
+      );
+      match.events.push(suddenDeathEvent[0]._id);
+      await match.save({ session });
+
+      // Broadcast events
+      socketEmitter.broadcastSuddenDeathResult(matchId, {
+        matchId,
+        outcome,
+        winner: winningTeamId,
+        kickingTeam: kickingTeamId,
+        defendingTeam: defendingTeamId,
+        shootout: match.shootout
+      });
+
+      socketEmitter.broadcastMatchCompleted(matchId, match.tournament, {
+        matchId,
+        status: MATCH_STATUS.COMPLETED,
+        winner: winningTeamId,
+        matchResult: match.matchResult,
+        teamAScore: match.teamAScore,
+        teamBScore: match.teamBScore,
+        shootout: match.shootout,
+        toss: match.toss
+      });
+
+      return {
+        match,
+        penalty: penalties[0],
+        winner: winningTeamId,
+        outcome
+      };
+    });
   }
 }
 

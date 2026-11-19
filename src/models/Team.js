@@ -24,7 +24,17 @@ const teamSchema = new mongoose.Schema(
       ref: 'Player',
       default: null
     },
+    captainName: {
+      type: String,
+      trim: true,
+      default: ''
+    },
     coach: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    conference: {
       type: String,
       trim: true,
       default: ''
@@ -71,7 +81,15 @@ const teamSchema = new mongoose.Schema(
     }
   },
   {
-    timestamps: true
+    timestamps: true,
+    toJSON: {
+      transform: function(doc, ret) {
+        if (!ret.captain && ret.captainName) {
+          ret.captain = ret.captainName;
+        }
+        return ret;
+      }
+    }
   }
 );
 

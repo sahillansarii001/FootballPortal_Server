@@ -13,28 +13,54 @@ const server = http.createServer(app);
 const io = initSocket(server);
 
 const startServer = async () => {
+  // Bind HTTP & Socket.IO server to PORT first so frontend can communicate immediately
+  server.listen(config.port, () => {
+    logger.success(`🚀 Football Portal Server is running on http://localhost:${config.port}`);
+    logger.info(`Environment: ${config.env}`);
+    logger.info(`Socket.IO live updates enabled`);
+  });
+
+  const initializeConnectedServices = async () => {
+    try {
+      await AuthService.seedInitialSuperAdmin();
+
+      const Tournament = require('./src/models/Tournament');
+      const User = require('./src/models/User');
+      const tournamentCount = await Tournament.countDocuments();
+      if (tournamentCount === 0) {
+        const admin = await User.findOne({ role: 'SuperAdmin' });
+        await Tournament.create({
+          name: '2026 Inter-College Spring Cup',
+          description: 'Official Championship Tournament',
+          startDate: new Date(),
+          endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+          status: 'Ongoing',
+          createdBy: admin ? admin._id : null
+        });
+        logger.success('Initialized default tournament: 2026 Inter-College Spring Cup');
+      }
+
+      await TimerService.recoverActiveTimers();
+      TimerService.startTicker(1000); // 1-second ticker (hardcoded)
+      logger.success('Database initialized with admin and live timer engine ticker');
+    } catch (err) {
+      logger.warn(`Post-connect initialization pending: ${err.message}`);
+    }
+  };
+
   try {
-    // Connect to MongoDB
-    await connectDatabase();
-
-    // Auto-seed default Super Admin
-    await AuthService.seedInitialSuperAdmin();
-
-    // Recover active timers after server restart (recalculates timestamps and processes expired stages)
-    await TimerService.recoverActiveTimers();
-
-    // Start live match timer engine ticker
-    TimerService.startTicker(config.timerTickIntervalMs);
-
-    // Listen on port
-    server.listen(config.port, () => {
-      logger.success(`🚀 Football Portal Server is running on http://localhost:${config.port}`);
-      logger.info(`Environment: ${config.env}`);
-      logger.info(`Socket.IO live updates enabled`);
-    });
+    const conn = await connectDatabase();
+    if (conn) {
+      await initializeConnectedServices();
+    } else {
+      // Connect callback when mongoose connects on retry
+      const mongoose = require('mongoose');
+      mongoose.connection.once('connected', () => {
+        initializeConnectedServices();
+      });
+    }
   } catch (error) {
-    logger.error(`Failed to start server: ${error.message}`);
-    process.exit(1);
+    logger.warn(`Initial database connection pending: ${error.message}`);
   }
 };
 

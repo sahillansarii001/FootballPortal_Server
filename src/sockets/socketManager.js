@@ -163,6 +163,17 @@ const socketEmitter = {
     if (io) {
       io.to(`match:${matchId}`).emit('score:update', data);
       io.to(`match:${matchId}`).emit('score:updated', data);
+      io.emit('score:update', data);
+      io.emit('score:updated', data);
+    }
+  },
+
+  // Broadcast full match state sync
+  broadcastMatchSync: (matchId, data) => {
+    if (io) {
+      io.to(`match:${matchId}`).emit('match:sync', data);
+      io.to(`match:${matchId}`).emit('sync:state', data);
+      io.emit('match:updated', data);
     }
   },
 
@@ -171,6 +182,8 @@ const socketEmitter = {
     if (io) {
       io.to(`match:${matchId}`).emit('goal:scored', data);
       io.to(`match:${matchId}`).emit('goal:recorded', data);
+      io.emit('goal:scored', data);
+      io.emit('goal:recorded', data);
     }
   },
 
@@ -179,6 +192,8 @@ const socketEmitter = {
     if (io) {
       io.to(`match:${matchId}`).emit('goal:removed', data);
       io.to(`match:${matchId}`).emit('goal:undone', data);
+      io.emit('goal:removed', data);
+      io.emit('goal:undone', data);
     }
   },
 
@@ -201,6 +216,22 @@ const socketEmitter = {
     if (io) {
       io.to(`match:${matchId}`).emit('penalty:completed', data);
       io.to(`match:${matchId}`).emit('match:result_declared', data);
+    }
+  },
+
+  // Broadcast toss completed
+  broadcastTossCompleted: (matchId, data) => {
+    if (io) {
+      io.to(`match:${matchId}`).emit('match:toss-completed', data);
+      io.to(`match:${matchId}`).emit('toss:completed', data);
+    }
+  },
+
+  // Broadcast sudden death kick result
+  broadcastSuddenDeathResult: (matchId, data) => {
+    if (io) {
+      io.to(`match:${matchId}`).emit('match:sudden-death-result', data);
+      io.to(`match:${matchId}`).emit('sudden_death:result', data);
     }
   },
 

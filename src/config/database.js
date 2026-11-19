@@ -1,6 +1,16 @@
 const mongoose = require('mongoose');
+const dns = require('dns');
 const config = require('./env');
 const logger = require('../utils/logger');
+
+// Configure public DNS resolvers to handle SRV record lookups reliably on Windows and local networks
+if (typeof dns.setServers === 'function') {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch (err) {
+    // Retain system DNS if custom resolution cannot be initialized
+  }
+}
 
 const connectDatabase = async (customUri = null) => {
   const primaryUri = customUri || config.mongoUri;
@@ -31,9 +41,12 @@ const connectDatabase = async (customUri = null) => {
       }
     }
 
-    logger.error(`Database connection failed: ${error.message}`);
+    logger.error(`Database connection failed: ${error.message}. Retrying in 5 seconds...`);
     if (process.env.NODE_ENV !== 'test') {
-      process.exit(1);
+      setTimeout(() => {
+        connectDatabase(customUri).catch(() => {});
+      }, 5000);
+      return null;
     }
     throw error;
   }

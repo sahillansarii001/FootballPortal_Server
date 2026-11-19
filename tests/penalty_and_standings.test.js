@@ -223,6 +223,49 @@ describe('Penalty Shootout, Leaderboard & Standings Suite', () => {
       expect(runnerUp.points).toBe(0);
       expect(runnerUp.lost).toBe(1);
     });
+
+    it('should support Sudden Death Coin Toss & Decisive Kick when tied after 3 kicks', async () => {
+      // Both teams score 3-3 in the regulation 3-kick shootout
+      for (let i = 0; i < 3; i++) {
+        await request(app).post(`/api/matches/${matchId}/penalties`).set('Authorization', `Bearer ${operatorToken}`).send({
+          team: teamAId,
+          player: takerA1,
+          goalkeeper: keeperB,
+          outcome: PENALTY_OUTCOMES.GOAL
+        });
+        await request(app).post(`/api/matches/${matchId}/penalties`).set('Authorization', `Bearer ${operatorToken}`).send({
+          team: teamBId,
+          player: takerB1,
+          goalkeeper: keeperA,
+          outcome: PENALTY_OUTCOMES.GOAL
+        });
+      }
+
+      // 1. Conduct Coin Toss: Team A wins toss and chooses 'ATTACK' (SHOOT)
+      const tossRes = await request(app).post(`/api/matches/${matchId}/toss`).set('Authorization', `Bearer ${operatorToken}`).send({
+        tossWinner: teamAId,
+        choice: 'ATTACK'
+      });
+      expect(tossRes.status).toBe(200);
+      expect(tossRes.body.data.toss.isTossConducted).toBe(true);
+      expect(tossRes.body.data.toss.choice).toBe('ATTACK');
+      expect(tossRes.body.data.toss.kickingTeam.toString()).toBe(teamAId);
+
+      // 2. Execute Decisive Kick: Team A taker scores -> Team A wins immediately!
+      const kickRes = await request(app).post(`/api/matches/${matchId}/toss/decisive-kick`).set('Authorization', `Bearer ${operatorToken}`).send({
+        player: takerA1,
+        goalkeeper: keeperB,
+        outcome: PENALTY_OUTCOMES.GOAL
+      });
+      expect(kickRes.status).toBe(200);
+      expect(kickRes.body.data.winner.toString()).toBe(teamAId);
+      expect(kickRes.body.data.match.status).toBe('Completed');
+
+      // 3. Strict Verification: Player A1 goals count should still be 0 (never incremented by shootout kicks)
+      const playerRes = await request(app).get(`/api/players/${takerA1}`);
+      expect(playerRes.body.data.goals).toBe(0);
+      expect(playerRes.body.data.penaltiesScored).toBeGreaterThan(0);
+    });
   });
 
   describe('Match Summary Retrieval', () => {

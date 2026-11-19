@@ -142,12 +142,12 @@ router.post(
 );
 
 // ==========================================
-// Goal Management Routes
+// Goal Management Routes (supports /goals and /goal)
 // ==========================================
-router.get('/:id/goals', goalController.getMatchGoals);
+router.get(['/:id/goals', '/:id/goal'], goalController.getMatchGoals);
 
 router.post(
-  '/:id/goals',
+  ['/:id/goals', '/:id/goal'],
   authenticate,
   authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
   validate(recordGoalSchema),
@@ -155,14 +155,21 @@ router.post(
 );
 
 router.post(
-  '/:id/goals/undo',
+  ['/:id/goals/undo', '/:id/goal/undo'],
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  goalController.undoGoal
+);
+
+router.delete(
+  ['/:id/goals/:eventId', '/:id/goal/:eventId'],
   authenticate,
   authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
   goalController.undoGoal
 );
 
 router.put(
-  '/:id/goals/:eventId',
+  ['/:id/goals/:eventId', '/:id/goal/:eventId'],
   authenticate,
   authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
   validate(updateGoalSchema),
@@ -180,6 +187,21 @@ router.post(
   authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
   validate(recordPenaltySchema),
   penaltyController.recordPenalty
+);
+
+// Sudden Death Toss & Decisive Kick Routes
+router.post(
+  '/:id/toss',
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  penaltyController.recordToss
+);
+
+router.post(
+  ['/:id/toss/decisive-kick', '/:id/sudden-death/kick'],
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  penaltyController.recordDecisiveKick
 );
 
 // ==========================================

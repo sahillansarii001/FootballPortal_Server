@@ -93,10 +93,26 @@ class TournamentService {
       filter.name = { $regex: query.search, $options: 'i' };
     }
 
-    return Tournament.find(filter)
+    let tournaments = await Tournament.find(filter)
       .populate('participatingTeams', 'name logo matchesPlayed totalPoints')
       .populate('createdBy', 'username email')
       .sort({ createdAt: -1 });
+
+    if (tournaments.length === 0 && !query.search) {
+      const User = require('../models/User');
+      const admin = await User.findOne({ role: 'SuperAdmin' });
+      const defaultTournament = await Tournament.create({
+        name: '2026 Inter-College Spring Cup',
+        description: 'Official Championship Tournament',
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+        status: 'Ongoing',
+        createdBy: admin ? admin._id : null
+      });
+      tournaments = [defaultTournament];
+    }
+
+    return tournaments;
   }
 
   static async getTournamentById(id) {

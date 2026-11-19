@@ -8,6 +8,7 @@ const playerRoutes = require('./playerRoutes');
 const matchRoutes = require('./matchRoutes');
 const leaderboardRoutes = require('./leaderboardRoutes');
 const standingsRoutes = require('./standingsRoutes');
+const swaggerRoutes = require('../docs/swaggerRoute');
 
 router.get('/health', (req, res) => {
   res.status(200).json({
@@ -17,6 +18,7 @@ router.get('/health', (req, res) => {
   });
 });
 
+router.use('/docs', swaggerRoutes);
 router.use('/auth', authRoutes);
 router.use('/tournaments', tournamentRoutes);
 router.use('/teams', teamRoutes);

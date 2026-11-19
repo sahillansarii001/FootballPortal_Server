@@ -8,10 +8,11 @@ const validate = (schema) => (req, res, next) => {
   } catch (err) {
     if (err.errors) {
       const formattedErrors = err.errors.map((e) => ({
-        field: e.path.join('.'),
+        field: e.path && e.path.length > 0 ? e.path.join('.') : 'request',
         message: e.message
       }));
-      return ApiResponse.badRequest(res, 'Validation failed', formattedErrors);
+      const summary = formattedErrors.map((e) => (e.field !== 'request' ? `${e.field}: ${e.message}` : e.message)).join(', ');
+      return ApiResponse.badRequest(res, `Validation failed: ${summary}`, formattedErrors);
     }
     return ApiResponse.badRequest(res, 'Invalid request data', err.message);
   }

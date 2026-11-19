@@ -44,8 +44,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting for standard API endpoints
 const limiter = rateLimit({
-  windowMs: config.rateLimitWindowMs,
-  max: config.rateLimitMax,
+  windowMs: 900000, // 15 minutes (hardcoded)
+  max: 1000, // 1000 requests per 15 minutes (hardcoded)
   standardHeaders: true,
   legacyHeaders: false,
   message: {

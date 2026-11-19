@@ -14,6 +14,28 @@ const scheduleMatch = asyncHandler(async (req, res) => {
 
 const updateMatch = asyncHandler(async (req, res) => {
   const match = await MatchService.updateMatch(req.params.id, req.body);
+
+  // Broadcast real-time score updates to all sockets (room + global) immediately
+  if (req.body.teamAScore !== undefined || req.body.teamBScore !== undefined) {
+    socketEmitter.broadcastScoreUpdate(match._id.toString(), {
+      matchId: match._id.toString(),
+      teamAScore: match.teamAScore,
+      teamBScore: match.teamBScore,
+      score: {
+        teamA: match.teamAScore,
+        teamB: match.teamBScore
+      }
+    });
+  }
+
+  // Broadcast full state sync for any changes (score, status, stage, timer, venue)
+  try {
+    const liveState = await MatchService.getLiveMatchState(match._id.toString());
+    socketEmitter.broadcastMatchSync(match._id.toString(), liveState);
+  } catch (err) {
+    socketEmitter.broadcastMatchSync(match._id.toString(), match);
+  }
+
   return ApiResponse.success(res, 'Match updated successfully', match);
 });
 

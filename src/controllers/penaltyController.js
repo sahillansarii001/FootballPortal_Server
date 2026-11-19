@@ -12,7 +12,19 @@ const getMatchPenalties = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, 'Match penalties fetched successfully', result);
 });
 
+const recordToss = asyncHandler(async (req, res) => {
+  const result = await PenaltyService.recordToss(req.params.id, req.body, req.user?._id);
+  return ApiResponse.success(res, 'Coin toss result recorded successfully', result);
+});
+
+const recordDecisiveKick = asyncHandler(async (req, res) => {
+  const result = await PenaltyService.recordDecisiveKick(req.params.id, req.body, req.user?._id);
+  return ApiResponse.success(res, 'Decisive sudden-death penalty kick recorded successfully', result);
+});
+
 module.exports = {
   recordPenalty,
-  getMatchPenalties
+  getMatchPenalties,
+  recordToss,
+  recordDecisiveKick
 };

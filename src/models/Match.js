@@ -110,6 +110,64 @@ const shootoutStateSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const tossSchema = new mongoose.Schema(
+  {
+    isTossConducted: {
+      type: Boolean,
+      default: false
+    },
+    tossWinner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Team',
+      default: null
+    },
+    choice: {
+      type: String,
+      enum: ['ATTACK', 'DEFEND', 'SHOOT', 'SAVE', null],
+      default: null
+    },
+    kickingTeam: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Team',
+      default: null
+    },
+    defendingTeam: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Team',
+      default: null
+    },
+    decisivePenaltyTaker: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Player',
+      default: null
+    },
+    decisiveGoalkeeper: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Player',
+      default: null
+    },
+    decisiveOutcome: {
+      type: String,
+      enum: ['GOAL', 'SAVED', 'MISSED', null],
+      default: null
+    },
+    winner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Team',
+      default: null
+    },
+    conductedAt: {
+      type: Date,
+      default: null
+    },
+    completedAt: {
+      type: Date,
+      default: null
+    }
+  },
+  { _id: false }
+);
+
 const matchSchema = new mongoose.Schema(
   {
     tournament: {
@@ -143,6 +201,11 @@ const matchSchema = new mongoose.Schema(
     venue: {
       type: String,
       required: [true, 'Venue is required'],
+      trim: true
+    },
+    stage: {
+      type: String,
+      default: 'Group Stage',
       trim: true
     },
     status: {
@@ -185,6 +248,10 @@ const matchSchema = new mongoose.Schema(
     },
     shootout: {
       type: shootoutStateSchema,
+      default: () => ({})
+    },
+    toss: {
+      type: tossSchema,
       default: () => ({})
     }
   },

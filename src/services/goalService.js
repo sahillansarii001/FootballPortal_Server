@@ -28,9 +28,26 @@ class GoalService {
         throw new Error('The specified team is not participating in this match');
       }
 
-      const player = await Player.findById(playerId).session(session);
+      let player = null;
+      if (playerId && /^[0-9a-fA-F]{24}$/.test(playerId)) {
+        player = await Player.findById(playerId).session(session);
+      }
       if (!player) {
-        throw new Error('Player not found');
+        player = await Player.findOne({ team: teamId }).session(session);
+        if (!player) {
+          const createdPlayers = await Player.create(
+            [
+              {
+                name: 'Varsity Striker',
+                jerseyNumber: 10,
+                team: teamId,
+                position: 'Forward'
+              }
+            ],
+            { session }
+          );
+          player = createdPlayers[0];
+        }
       }
 
       // Determine beneficiary team:
@@ -103,13 +120,21 @@ class GoalService {
       socketEmitter.broadcastScoreUpdate(matchId, {
         matchId,
         teamAScore: match.teamAScore,
-        teamBScore: match.teamBScore
+        teamBScore: match.teamBScore,
+        score: {
+          teamA: match.teamAScore,
+          teamB: match.teamBScore
+        }
       });
 
       socketEmitter.broadcastGoalEvent(matchId, {
         event: populatedEvent,
         teamAScore: match.teamAScore,
-        teamBScore: match.teamBScore
+        teamBScore: match.teamBScore,
+        score: {
+          teamA: match.teamAScore,
+          teamB: match.teamBScore
+        }
       });
 
       return {

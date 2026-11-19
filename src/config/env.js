@@ -10,9 +10,9 @@ const config = {
   corsOrigins: process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
     : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:4173'],
-  rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
-  rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '1000', 10),
-  timerTickIntervalMs: parseInt(process.env.TIMER_TICK_INTERVAL_MS || '1000', 10)
+  rateLimitWindowMs: 900000, // 15 minutes (hardcoded)
+  rateLimitMax: 1000, // 1000 requests per 15 minutes (hardcoded)
+  timerTickIntervalMs: 1000 // 1 second ticker interval (hardcoded)
 };
 
 module.exports = config;

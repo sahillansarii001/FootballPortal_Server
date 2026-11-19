@@ -9,7 +9,14 @@ class TeamService {
       throw new Error(`Team with name "${data.name}" already exists`);
     }
 
-    return Team.create(data);
+    const payload = { ...data };
+    if (payload.captain && typeof payload.captain === 'string' && !/^[0-9a-fA-F]{24}$/.test(payload.captain)) {
+      payload.captainName = payload.captain.trim();
+      delete payload.captain;
+    }
+
+    const team = await Team.create(payload);
+    return team;
   }
 
   static async updateTeam(id, updateData) {
@@ -25,7 +32,13 @@ class TeamService {
       }
     }
 
-    Object.assign(team, updateData);
+    const payload = { ...updateData };
+    if (payload.captain && typeof payload.captain === 'string' && !/^[0-9a-fA-F]{24}$/.test(payload.captain)) {
+      payload.captainName = payload.captain.trim();
+      delete payload.captain;
+    }
+
+    Object.assign(team, payload);
     await team.save();
 
     return Team.findById(id).populate('captain', 'name jerseyNumber position').populate('players');

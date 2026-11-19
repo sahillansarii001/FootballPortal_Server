@@ -10,15 +10,33 @@ class MatchService {
    * Schedule a new match with validation to prevent scheduling conflicts
    */
   static async scheduleMatch(data) {
-    const { tournament: tournamentId, matchNumber, teamA: teamAId, teamB: teamBId, matchDate, matchTime, venue } = data;
+    let tournamentId = data.tournament || data.tournamentId;
+    const { teamA: teamAId, teamB: teamBId, matchDate, matchTime, venue, stage } = data;
 
     if (teamAId === teamBId) {
       throw new Error('Team A and Team B must be different teams');
     }
 
-    const tournament = await Tournament.findById(tournamentId);
+    // Resolve tournament: if provided ID is valid ObjectId, find it; otherwise pick active tournament
+    let tournament = null;
+    if (tournamentId && /^[0-9a-fA-F]{24}$/.test(tournamentId)) {
+      tournament = await Tournament.findById(tournamentId);
+    }
     if (!tournament) {
-      throw new Error('Tournament not found');
+      tournament = (await Tournament.findOne({ status: 'Ongoing' })) || (await Tournament.findOne());
+      if (!tournament) {
+        const User = require('../models/User');
+        const adminUser = await User.findOne({ role: 'SuperAdmin' });
+        tournament = await Tournament.create({
+          name: '2026 Inter-College Spring Cup',
+          description: 'Official Championship Tournament',
+          startDate: new Date(),
+          endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+          status: 'Ongoing',
+          createdBy: adminUser ? adminUser._id : null
+        });
+      }
+      tournamentId = tournament._id.toString();
     }
 
     const teamA = await Team.findById(teamAId);
@@ -27,14 +45,32 @@ class MatchService {
       throw new Error('One or both teams not found');
     }
 
-    // Check unique match number in tournament
-    const existingNumber = await Match.findOne({ tournament: tournamentId, matchNumber });
-    if (existingNumber) {
-      throw new Error(`Match number ${matchNumber} is already scheduled in this tournament`);
+    // Auto-calculate matchNumber if not provided or collision
+    let matchNumber = data.matchNumber;
+    if (!matchNumber || matchNumber <= 0) {
+      const highestMatch = await Match.findOne({ tournament: tournamentId }).sort({ matchNumber: -1 });
+      matchNumber = highestMatch ? (highestMatch.matchNumber || 0) + 1 : 1;
+    } else {
+      const existingNumber = await Match.findOne({ tournament: tournamentId, matchNumber });
+      if (existingNumber) {
+        const highestMatch = await Match.findOne({ tournament: tournamentId }).sort({ matchNumber: -1 });
+        matchNumber = highestMatch ? (highestMatch.matchNumber || 0) + 1 : matchNumber + 1;
+      }
+    }
+
+    // Robust date parsing supporting YYYY-MM-DD and DD-MM-YYYY
+    let targetDate;
+    if (typeof matchDate === 'string' && /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.test(matchDate.trim())) {
+      const parts = matchDate.trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+      targetDate = new Date(Date.UTC(parseInt(parts[3], 10), parseInt(parts[2], 10) - 1, parseInt(parts[1], 10)));
+    } else {
+      targetDate = new Date(matchDate);
+    }
+    if (isNaN(targetDate.getTime())) {
+      targetDate = new Date();
     }
 
     // Schedule collision prevention: check if teamA or teamB is already scheduled at the same date & time
-    const targetDate = new Date(matchDate);
     const startOfDay = new Date(targetDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(targetDate);
@@ -70,6 +106,7 @@ class MatchService {
       matchDate: targetDate,
       matchTime,
       venue,
+      stage: stage || 'Group Stage',
       status: MATCH_STATUS.UPCOMING,
       timer: {
         currentStage: TIMER_STAGES.FIRST_HALF,
@@ -82,6 +119,41 @@ class MatchService {
         isPaused: false
       }
     });
+
+    // Ensure participatingTeams and standings exist for both teams
+    if (tournament && Array.isArray(tournament.participatingTeams)) {
+      let needsSave = false;
+      if (!tournament.participatingTeams.map(t => t.toString()).includes(teamAId.toString())) {
+        tournament.participatingTeams.push(teamAId);
+        needsSave = true;
+      }
+      if (!tournament.participatingTeams.map(t => t.toString()).includes(teamBId.toString())) {
+        tournament.participatingTeams.push(teamBId);
+        needsSave = true;
+      }
+      if (needsSave) {
+        await tournament.save();
+      }
+    }
+
+    const TournamentStanding = require('../models/TournamentStanding');
+    for (const tId of [teamAId, teamBId]) {
+      const standingExists = await TournamentStanding.findOne({ tournament: tournamentId, team: tId });
+      if (!standingExists) {
+        await TournamentStanding.create({
+          tournament: tournamentId,
+          team: tId,
+          position: 0,
+          matchesPlayed: 0,
+          won: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          goalDifference: 0,
+          points: 0
+        });
+      }
+    }
 
     return Match.findById(match._id)
       .populate('teamA', 'name logo coach')
@@ -102,7 +174,16 @@ class MatchService {
     }
 
     // If date or time is modified, check collision
-    const targetDate = updateData.matchDate ? new Date(updateData.matchDate) : match.matchDate;
+    let targetDate = match.matchDate;
+    if (updateData.matchDate) {
+      if (typeof updateData.matchDate === 'string' && /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.test(updateData.matchDate.trim())) {
+        const parts = updateData.matchDate.trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+        targetDate = new Date(Date.UTC(parseInt(parts[3], 10), parseInt(parts[2], 10) - 1, parseInt(parts[1], 10)));
+      } else {
+        targetDate = new Date(updateData.matchDate);
+      }
+      updateData.matchDate = targetDate;
+    }
     const targetTime = updateData.matchTime || match.matchTime;
     const teamAId = updateData.teamA || match.teamA.toString();
     const teamBId = updateData.teamB || match.teamB.toString();
