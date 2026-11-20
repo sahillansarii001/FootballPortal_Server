@@ -608,6 +608,240 @@ class TimerService {
   }
 
   /**
+   * Directly and authoritatively set match stage and clock duration (Super Admin / Operator)
+   */
+  static async setStage(matchId, stageName, durationSeconds = null, userId = null) {
+    const match = await Match.findById(matchId);
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    const prevStage = match.timer.currentStage || TIMER_STAGES.FIRST_HALF;
+    const normalizedKey = (stageName || '').trim().toLowerCase();
+    let targetStage = TIMER_STAGES.FIRST_HALF;
+
+    if (normalizedKey.includes('extra') || normalizedKey.includes('draw')) {
+      targetStage = TIMER_STAGES.EXTRA_TIME;
+    } else if (normalizedKey.includes('second') || normalizedKey.includes('2nd')) {
+      targetStage = TIMER_STAGES.SECOND_HALF;
+    } else if (normalizedKey.includes('break') || normalizedKey.includes('half-time') || normalizedKey.includes('halftime')) {
+      targetStage = TIMER_STAGES.HALF_TIME;
+    } else if (normalizedKey.includes('penalty') || normalizedKey.includes('shootout')) {
+      targetStage = TIMER_STAGES.PENALTY_SHOOTOUT;
+    } else if (normalizedKey.includes('complete') || normalizedKey.includes('finish') || normalizedKey.includes('ft')) {
+      targetStage = TIMER_STAGES.COMPLETED;
+    } else if (normalizedKey.includes('first') || normalizedKey.includes('1st')) {
+      targetStage = TIMER_STAGES.FIRST_HALF;
+    } else {
+      targetStage = stageName;
+    }
+
+    // Determine duration
+    let stageDuration;
+    if (typeof durationSeconds === 'number' && durationSeconds >= 0) {
+      stageDuration = durationSeconds;
+    } else if (STAGE_DURATIONS[targetStage] !== undefined) {
+      stageDuration = STAGE_DURATIONS[targetStage];
+    } else {
+      stageDuration = 240;
+    }
+
+    // Archive previous stage into stageHistory if running
+    if (match.timer.startedTimestamp && prevStage !== targetStage) {
+      match.timer.stageHistory.push({
+        stage: prevStage,
+        startedAt: match.timer.startedTimestamp,
+        endedAt: new Date(),
+        durationSeconds: match.timer.stageDuration
+      });
+    }
+
+    const now = new Date();
+
+    if (targetStage === TIMER_STAGES.PENALTY_SHOOTOUT) {
+      match.status = MATCH_STATUS.PENALTY_SHOOTOUT;
+      match.timer.currentStage = TIMER_STAGES.PENALTY_SHOOTOUT;
+      match.timer.stageDuration = 0;
+      match.timer.remainingTime = 0;
+      match.timer.phaseEndsAt = null;
+      match.timer.isRunning = false;
+      match.timer.isPaused = false;
+      match.timer.timerStatus = 'COMPLETED';
+      match.shootout = match.shootout || {};
+      match.shootout.isShootout = true;
+      match.matchResult = 'Draw - Penalty Shootout Active';
+    } else if (targetStage === TIMER_STAGES.COMPLETED) {
+      match.status = MATCH_STATUS.COMPLETED;
+      match.timer.currentStage = TIMER_STAGES.COMPLETED;
+      match.timer.stageDuration = 0;
+      match.timer.remainingTime = 0;
+      match.timer.phaseEndsAt = null;
+      match.timer.isRunning = false;
+      match.timer.isPaused = false;
+      match.timer.timerStatus = 'COMPLETED';
+    } else {
+      const phaseEndsAt = new Date(now.getTime() + stageDuration * 1000);
+      match.timer.currentStage = targetStage;
+      match.timer.stageDuration = stageDuration;
+      match.timer.remainingTime = stageDuration;
+      match.timer.startedTimestamp = now;
+      match.timer.phaseEndsAt = phaseEndsAt;
+      match.timer.pausedTimestamp = null;
+      match.timer.totalPausedDuration = 0;
+      match.timer.isRunning = true;
+      match.timer.isPaused = false;
+      match.timer.timerStatus = 'RUNNING';
+      match.timer.lastTransitionAt = now;
+
+      if (targetStage === TIMER_STAGES.HALF_TIME) {
+        match.status = MATCH_STATUS.HALF_TIME;
+      } else {
+        match.status = MATCH_STATUS.LIVE;
+      }
+    }
+
+    await match.save();
+
+    TimerService.logTimerAction('STAGE_MANUALLY_SET', {
+      matchId,
+      prevStatus: prevStage,
+      newStatus: targetStage,
+      phase: targetStage,
+      remainingMs: stageDuration * 1000,
+      userId: userId || 'OFFICIAL'
+    });
+
+    try {
+      const stageEvent = await MatchEvent.create({
+        match: match._id,
+        tournament: match.tournament,
+        type: EVENT_TYPES.STAGE_CHANGE,
+        stage: targetStage,
+        matchTime: `${Math.floor(stageDuration / 60)}:${String(stageDuration % 60).padStart(2, '0')}`,
+        timestamp: now,
+        detail: { previousStage: prevStage, newStage: targetStage, duration: stageDuration },
+        createdBy: userId
+      });
+      match.events.push(stageEvent._id);
+      await match.save();
+    } catch (e) {
+      // ignore event logging error
+    }
+
+    socketEmitter.broadcastStageChange(matchId, {
+      matchId,
+      previousStage: prevStage,
+      currentStage: targetStage,
+      status: match.status,
+      remainingTime: stageDuration,
+      stageDuration: stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now()
+    });
+
+    socketEmitter.broadcastMatchPhaseChanged(matchId, {
+      matchId,
+      phase: targetStage,
+      status: match.status,
+      remainingTime: stageDuration,
+      stageDuration: stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now()
+    });
+
+    socketEmitter.broadcastTimerEvent(matchId, 'timer:sync', {
+      matchId,
+      currentStage: targetStage,
+      remainingTime: stageDuration,
+      stageDuration: stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: match.timer.isRunning,
+      isPaused: match.timer.isPaused
+    });
+
+    socketEmitter.broadcastTimerEvent(matchId, 'timer:started', {
+      matchId,
+      currentStage: targetStage,
+      remainingTime: stageDuration,
+      stageDuration: stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: match.timer.isRunning,
+      isPaused: match.timer.isPaused
+    });
+
+    socketEmitter.broadcastTimerUpdate(matchId, {
+      matchId,
+      currentStage: targetStage,
+      remainingTime: stageDuration,
+      stageDuration: stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: match.timer.isRunning,
+      isPaused: match.timer.isPaused,
+      teamAScore: match.teamAScore,
+      teamBScore: match.teamBScore
+    });
+
+    try {
+      const MatchService = require('./matchService');
+      const liveState = await MatchService.getLiveMatchState(matchId);
+      socketEmitter.broadcastMatchSync(matchId, liveState);
+    } catch (e) {
+      // fallback
+    }
+
+    return match;
+  }
+
+  /**
+   * Set clock remaining seconds directly (Super Admin / Operator)
+   */
+  static async setClockTime(matchId, seconds = 240, userId = null) {
+    const match = await Match.findById(matchId);
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    const newRemaining = Math.max(0, Number(seconds));
+    match.timer.remainingTime = newRemaining;
+    match.timer.stageDuration = Math.max(match.timer.stageDuration || 0, newRemaining);
+
+    if (match.timer.isRunning && !match.timer.isPaused) {
+      match.timer.phaseEndsAt = new Date(Date.now() + newRemaining * 1000);
+    }
+
+    await match.save();
+
+    socketEmitter.broadcastTimerEvent(matchId, 'timer:sync', {
+      matchId,
+      currentStage: match.timer.currentStage,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: match.timer.isRunning,
+      isPaused: match.timer.isPaused
+    });
+
+    socketEmitter.broadcastTimerUpdate(matchId, {
+      matchId,
+      currentStage: match.timer.currentStage,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: match.timer.isRunning,
+      isPaused: match.timer.isPaused,
+      teamAScore: match.teamAScore,
+      teamBScore: match.teamBScore
+    });
+
+    return match;
+  }
+
+  /**
    * Automatically transition to next stage when stage time expires.
    * Phase Progression:
    * FIRST_HALF (4m) -> HALF_TIME (2m) -> SECOND_HALF (4m) -> EXTRA_TIME (2m if tied) -> PENALTIES (if tied) -> COMPLETED

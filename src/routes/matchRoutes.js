@@ -141,6 +141,42 @@ router.post(
   matchTimerController.addTime
 );
 
+router.post(
+  ['/:id/timer/stage', '/:id/timer/set-stage', '/:id/stage'],
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  matchTimerController.setStage
+);
+
+router.post(
+  ['/:id/halftime', '/:id/half-time'],
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  (req, res, next) => {
+    req.body.stage = 'Half-Time';
+    req.body.duration = 120;
+    return matchTimerController.setStage(req, res, next);
+  }
+);
+
+router.post(
+  ['/:id/second-half', '/:id/secondhalf'],
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  (req, res, next) => {
+    req.body.stage = 'Second Half';
+    req.body.duration = 240;
+    return matchTimerController.setStage(req, res, next);
+  }
+);
+
+router.post(
+  ['/:id/timer/set-time', '/:id/timer/time'],
+  authenticate,
+  authorize(ROLES.SUPER_ADMIN, ROLES.MATCH_OPERATOR),
+  matchTimerController.setClockTime
+);
+
 // ==========================================
 // Goal Management Routes (supports /goals and /goal)
 // ==========================================

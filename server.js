@@ -30,14 +30,19 @@ const startServer = async () => {
       if (tournamentCount === 0) {
         const admin = await User.findOne({ role: 'SuperAdmin' });
         await Tournament.create({
-          name: '2026 Inter-College Spring Cup',
-          description: 'Official Championship Tournament',
+          name: 'Alliance Premier League - Season 9',
+          description: 'Official APL Season 9 Championship Tournament',
           startDate: new Date(),
           endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
           status: 'Ongoing',
           createdBy: admin ? admin._id : null
         });
-        logger.success('Initialized default tournament: 2026 Inter-College Spring Cup');
+        logger.success('Initialized default tournament: Alliance Premier League - Season 9');
+      } else {
+        await Tournament.updateMany(
+          { name: { $in: ['2026 Inter-College Spring Cup', '2026 Inter-College Championship'] } },
+          { $set: { name: 'Alliance Premier League - Season 9', description: 'Official APL Season 9 Championship Tournament' } }
+        );
       }
 
       await TimerService.recoverActiveTimers();

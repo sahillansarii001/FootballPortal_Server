@@ -151,6 +151,57 @@ const addTime = asyncHandler(async (req, res) => {
   });
 });
 
+const setStage = asyncHandler(async (req, res) => {
+  const stage = req.body.stage || req.body.targetStage;
+  const duration = req.body.duration !== undefined ? req.body.duration : req.body.durationSeconds;
+  if (!stage) {
+    return ApiResponse.badRequest(res, 'Stage is required');
+  }
+  const match = await TimerService.setStage(req.params.id, stage, duration, req.user?._id);
+  const remainingTime = TimerService.calculateRemainingTime(match);
+  return ApiResponse.success(res, `Stage set to ${match.timer.currentStage} successfully`, {
+    matchId: match._id,
+    status: match.status,
+    phase: match.timer.currentStage,
+    currentStage: match.timer.currentStage,
+    timerStatus: match.timer.timerStatus,
+    remainingTime,
+    remainingMs: remainingTime * 1000,
+    phaseEndsAt: match.timer.phaseEndsAt,
+    serverTime: Date.now(),
+    timer: {
+      ...match.timer.toObject(),
+      remainingTime,
+      remainingMs: remainingTime * 1000
+    }
+  });
+});
+
+const setClockTime = asyncHandler(async (req, res) => {
+  const seconds = req.body.seconds;
+  if (typeof seconds !== 'number' || seconds < 0) {
+    return ApiResponse.badRequest(res, 'Valid seconds number required');
+  }
+  const match = await TimerService.setClockTime(req.params.id, seconds, req.user?._id);
+  const remainingTime = TimerService.calculateRemainingTime(match);
+  return ApiResponse.success(res, 'Clock time set successfully', {
+    matchId: match._id,
+    status: match.status,
+    phase: match.timer.currentStage,
+    currentStage: match.timer.currentStage,
+    timerStatus: match.timer.timerStatus,
+    remainingTime,
+    remainingMs: remainingTime * 1000,
+    phaseEndsAt: match.timer.phaseEndsAt,
+    serverTime: Date.now(),
+    timer: {
+      ...match.timer.toObject(),
+      remainingTime,
+      remainingMs: remainingTime * 1000
+    }
+  });
+});
+
 module.exports = {
   getTimerStatus,
   startTimer,
@@ -158,5 +209,7 @@ module.exports = {
   resumeTimer,
   resetTimer,
   advanceStage,
-  addTime
+  addTime,
+  setStage,
+  setClockTime
 };

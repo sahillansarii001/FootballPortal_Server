@@ -28,8 +28,8 @@ class MatchService {
         const User = require('../models/User');
         const adminUser = await User.findOne({ role: 'SuperAdmin' });
         tournament = await Tournament.create({
-          name: '2026 Inter-College Spring Cup',
-          description: 'Official Championship Tournament',
+          name: 'Alliance Premier League - Season 9',
+          description: 'Official APL Season 9 Championship Tournament',
           startDate: new Date(),
           endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
           status: 'Ongoing',
