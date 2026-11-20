@@ -427,7 +427,7 @@ class TimerService {
   }
 
   /**
-   * Reset match timer (Super Admin only)
+   * Reset match timer and clean prior match events (Super Admin / Operator)
    */
   static async resetTimer(matchId, userId = null) {
     const match = await Match.findById(matchId);
@@ -438,23 +438,78 @@ class TimerService {
     const tournament = await Tournament.findById(match.tournament);
     const halfDuration = tournament?.rules?.halfDurationSeconds || STAGE_DURATIONS[TIMER_STAGES.FIRST_HALF];
 
+    // 1. Cache previous match run data before wiping so history is retained in cache
+    const previousEvents = await MatchEvent.find({ match: matchId }).lean();
+    const PenaltyShootout = require('../models/PenaltyShootout');
+    const TossRecord = require('../models/TossRecord');
+    const previousPenalties = await PenaltyShootout.find({ match: matchId }).lean();
+    const previousToss = await TossRecord.find({ match: matchId }).lean();
+
+    const previousRun = {
+      resetAt: new Date(),
+      resetBy: userId,
+      finalScoreA: match.teamAScore,
+      finalScoreB: match.teamBScore,
+      winner: match.winner,
+      matchResult: match.matchResult,
+      eventsCount: previousEvents.length,
+      events: previousEvents,
+      penalties: previousPenalties,
+      toss: previousToss
+    };
+
+    if (!match.previousRuns) {
+      match.previousRuns = [];
+    }
+    match.previousRuns.push(previousRun);
+
+    // 2. Adjust player goals count for goals scored in this match run
+    const Player = require('../models/Player');
+    for (const ev of previousEvents) {
+      if ((ev.type === EVENT_TYPES.GOAL_SCORED || ev.type === 'GOAL') && ev.player && !ev.isUndone) {
+        await Player.findByIdAndUpdate(ev.player, {
+          $inc: { goals: -1 }
+        });
+      }
+    }
+
+    // 3. Delete prior match events, penalties, and toss records for this match
+    await MatchEvent.deleteMany({ match: matchId });
+    await PenaltyShootout.deleteMany({ match: matchId });
+    await TossRecord.deleteMany({ match: matchId });
+
+    // 4. Reset match state
     match.status = MATCH_STATUS.UPCOMING;
     match.isFinalized = false;
     match.teamAScore = 0;
     match.teamBScore = 0;
     match.winner = null;
-    match.matchResult = '';
+    match.matchResult = 'Scheduled';
     match.goals = [];
+    match.events = [];
     match.shootout = {
       isShootout: false,
       teamAPenaltyScore: 0,
       teamBPenaltyScore: 0,
       teamAPenaltiesTaken: 0,
       teamBPenaltiesTaken: 0,
-      round: 0,
+      round: 1,
       isSuddenDeath: false,
       isCompleted: false,
       shootoutWinner: null
+    };
+    match.toss = {
+      isTossConducted: false,
+      tossWinner: null,
+      choice: null,
+      kickingTeam: null,
+      defendingTeam: null,
+      decisivePenaltyTaker: null,
+      decisiveGoalkeeper: null,
+      decisiveOutcome: null,
+      winner: null,
+      conductedAt: null,
+      completedAt: null
     };
     match.timer.currentStage = TIMER_STAGES.FIRST_HALF;
     match.timer.stageDuration = halfDuration;
@@ -474,20 +529,7 @@ class TimerService {
       await StandingsService.recalculateTournamentStandings(match.tournament);
     }
 
-    // Record event
-    const event = await MatchEvent.create({
-      match: match._id,
-      tournament: match.tournament,
-      type: EVENT_TYPES.TIMER_RESET,
-      stage: TIMER_STAGES.FIRST_HALF,
-      matchTime: '00:00',
-      timestamp: new Date(),
-      detail: { resetBy: userId },
-      createdBy: userId
-    });
-    match.events.push(event._id);
-    await match.save();
-
+    // 5. Broadcast to all sockets: timer:reset, score:update, match:sync, and timeline event
     socketEmitter.broadcastTimerEvent(matchId, 'timer:reset', {
       matchId,
       currentStage: TIMER_STAGES.FIRST_HALF,
@@ -497,6 +539,29 @@ class TimerService {
       serverTime: Date.now(),
       isRunning: false,
       isPaused: false
+    });
+
+    socketEmitter.broadcastScoreUpdate(matchId, {
+      matchId: match._id.toString(),
+      teamAScore: 0,
+      teamBScore: 0,
+      score: { teamA: 0, teamB: 0 },
+      goals: []
+    });
+
+    try {
+      const MatchService = require('./matchService');
+      const liveState = await MatchService.getLiveMatchState(matchId);
+      socketEmitter.broadcastMatchSync(matchId, liveState);
+    } catch (e) {
+      // fallback
+    }
+
+    socketEmitter.broadcastTimelineEvent(matchId, {
+      type: 'MATCH_RESET',
+      matchId,
+      events: [],
+      goals: []
     });
 
     return match;

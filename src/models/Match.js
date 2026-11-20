@@ -249,6 +249,12 @@ const matchSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    previousRuns: [
+      {
+        type: mongoose.Schema.Types.Mixed,
+        default: []
+      }
+    ],
     events: [
       {
         type: mongoose.Schema.Types.ObjectId,

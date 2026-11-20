@@ -355,7 +355,7 @@ class MatchService {
 
     const remainingTime = TimerService.calculateRemainingTime(match);
 
-    const goals = await MatchEvent.find({
+    let goals = await MatchEvent.find({
       match: id,
       type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] },
       isUndone: false
@@ -363,6 +363,17 @@ class MatchService {
       .populate('team', 'name logo')
       .populate('player', 'name jerseyNumber position')
       .sort({ timestamp: 1 });
+
+    // Defensive safeguard: If match was restarted at 0-0 in First Half or Upcoming, purge prior ghost goals
+    if (match.teamAScore === 0 && match.teamBScore === 0 && (match.timer?.currentStage === TIMER_STAGES.FIRST_HALF || match.status === MATCH_STATUS.UPCOMING) && goals.length > 0) {
+      await MatchEvent.deleteMany({
+        match: id,
+        type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] }
+      });
+      match.events = [];
+      await match.save();
+      goals = [];
+    }
 
     const penalties = await PenaltyShootout.find({ match: id })
       .populate('team', 'name logo')
