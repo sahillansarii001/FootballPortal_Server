@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Match = require('../models/Match');
 const MatchEvent = require('../models/MatchEvent');
 const Player = require('../models/Player');
@@ -1403,6 +1404,11 @@ class TimerService {
 
     tickerInterval = setInterval(async () => {
       try {
+        if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+          // Database is temporarily disconnected or reconnecting; skip tick until reconnected
+          return;
+        }
+
         const liveMatches = await Match.find({
           'timer.isRunning': true,
           'timer.isPaused': false,
