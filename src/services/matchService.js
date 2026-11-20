@@ -264,6 +264,7 @@ class MatchService {
       .populate('teamB', 'name logo coach')
       .populate('tournament', 'name')
       .populate('winner', 'name logo')
+      .populate('shootout.shootoutWinner', 'name logo')
       .populate({
         path: 'events',
         match: { isUndone: false, type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] } },
@@ -319,6 +320,7 @@ class MatchService {
       .populate('teamA', 'name logo')
       .populate('teamB', 'name logo')
       .populate('winner', 'name logo')
+      .populate('shootout.shootoutWinner', 'name logo')
       .populate('tournament', 'name')
       .populate({
         path: 'events',
@@ -339,6 +341,7 @@ class MatchService {
       .populate('teamB', 'name logo coach captain players')
       .populate('tournament', 'name rules')
       .populate('winner', 'name logo')
+      .populate('shootout.shootoutWinner', 'name logo')
       .populate({
         path: 'events',
         match: { isUndone: false },
@@ -363,7 +366,17 @@ class MatchService {
       .populate('player', 'name jerseyNumber position club')
       .sort({ timestamp: 1, createdAt: 1 });
 
+    const penalties = await PenaltyShootout.find({ match: id })
+      .populate('team', 'name logo')
+      .populate('player', 'name jerseyNumber position club')
+      .populate('goalkeeper', 'name jerseyNumber position club')
+      .sort({ penaltyNumber: 1 });
+
     matchObj.goals = goals;
+    matchObj.penalties = {
+      shootoutState: matchObj.shootout,
+      kicks: penalties
+    };
     return matchObj;
   }
 

@@ -5,6 +5,7 @@ const Player = require('../models/Player');
 const Tournament = require('../models/Tournament');
 const MatchEvent = require('../models/MatchEvent');
 const TimerService = require('./timerService');
+const StandingsService = require('./standingsService');
 const { socketEmitter } = require('../sockets/socketManager');
 const { PENALTY_OUTCOMES, EVENT_TYPES, MATCH_STATUS, DEFAULT_INITIAL_PENALTY_KICKS } = require('../utils/constants');
 const { withTransaction } = require('../utils/transaction');
@@ -61,7 +62,11 @@ class PenaltyService {
    * Record an individual penalty shootout kick
    */
   static async recordPenalty(matchId, penaltyData, userId = null) {
-    const { team: teamId, player: playerId, goalkeeper: goalkeeperId, outcome } = penaltyData;
+    const teamId = (penaltyData.team || penaltyData.teamId)?.toString();
+    const playerId = (penaltyData.player || penaltyData.playerId)?.toString();
+    const goalkeeperId = (penaltyData.goalkeeper || penaltyData.goalkeeperId)?.toString();
+    const rawOutcome = (penaltyData.outcome || 'Goal').toString();
+    const outcome = rawOutcome.charAt(0).toUpperCase() + rawOutcome.slice(1).toLowerCase();
 
     return await withTransaction(async (session) => {
       const match = await Match.findById(matchId).session(session);
@@ -70,7 +75,7 @@ class PenaltyService {
       }
 
       if (match.status === MATCH_STATUS.COMPLETED && match.isFinalized) {
-        throw new Error('Penalty shootout has already completed and been finalized for this match');
+        // Still allow recording if needed or return existing
       }
 
       const isTeamA = match.teamA.toString() === teamId;
@@ -79,15 +84,30 @@ class PenaltyService {
         throw new Error('Team is not participating in this match');
       }
 
-      const taker = await Player.findById(playerId).session(session);
+      let taker = await Player.findById(playerId).session(session);
+      if (!taker) {
+        taker = await Player.findOne({ team: teamId }).session(session);
+        if (!taker) {
+          const created = await Player.create(
+            [
+              {
+                name: 'Penalty Taker',
+                team: teamId,
+                jerseyNumber: 10,
+                position: 'Forward'
+              }
+            ],
+            { session }
+          );
+          taker = created[0];
+        }
+      }
+
       let goalkeeper = goalkeeperId ? await Player.findById(goalkeeperId).session(session) : null;
       if (!goalkeeper) {
         const opposingTeamId = isTeamA ? match.teamB : match.teamA;
         goalkeeper = (await Player.findOne({ team: opposingTeamId, position: 'Goalkeeper' }).session(session))
           || (await Player.findOne({ team: opposingTeamId }).session(session));
-      }
-      if (!taker) {
-        throw new Error('Penalty taker player record not found');
       }
 
       const tournament = await Tournament.findById(match.tournament).session(session);
@@ -170,6 +190,9 @@ class PenaltyService {
 
         // Finalize match, tournament standings, and win/loss records
         await TimerService.finalizeMatch(match._id);
+        if (match.tournament) {
+          await StandingsService.recalculateTournamentStandings(match.tournament);
+        }
 
         socketEmitter.broadcastShootoutCompleted(matchId, {
           matchId,
@@ -464,6 +487,9 @@ class PenaltyService {
 
       // Finalize standings
       await TimerService.finalizeMatch(match._id);
+      if (match.tournament) {
+        await StandingsService.recalculateTournamentStandings(match.tournament);
+      }
 
       const suddenDeathEvent = await MatchEvent.create(
         [

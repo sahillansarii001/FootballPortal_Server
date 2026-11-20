@@ -65,8 +65,21 @@ const updateMatchSchema = z.object({
   stage: z.string().optional(),
   status: z.enum(Object.values(MATCH_STATUS)).optional(),
   teamAScore: z.number().int().min(0).optional(),
-  teamBScore: z.number().int().min(0).optional()
-}).transform((data) => ({
+  teamBScore: z.number().int().min(0).optional(),
+  winner: z.string().nullable().optional(),
+  matchResult: z.string().optional(),
+  isFinalized: z.boolean().optional(),
+  shootout: z.object({
+    isShootout: z.boolean().optional(),
+    teamAPenaltyScore: z.number().int().min(0).optional(),
+    teamBPenaltyScore: z.number().int().min(0).optional(),
+    teamAPenaltiesTaken: z.number().int().min(0).optional(),
+    teamBPenaltiesTaken: z.number().int().min(0).optional(),
+    round: z.number().int().min(0).optional(),
+    isCompleted: z.boolean().optional(),
+    shootoutWinner: z.string().nullable().optional()
+  }).optional()
+}).passthrough().transform((data) => ({
   ...data,
   ...(data.matchDate ? { matchDate: parseToIsoDateString(data.matchDate) } : {})
 }));

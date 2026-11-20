@@ -96,53 +96,109 @@ const getMatchTimeline = asyncHandler(async (req, res) => {
 });
 
 const endMatch = asyncHandler(async (req, res) => {
-  const match = await Match.findById(req.params.id);
+  const match = await Match.findById(req.params.id)
+    .populate('teamA', 'name logo')
+    .populate('teamB', 'name logo');
   if (!match) {
     return ApiResponse.notFound(res, 'Match not found');
   }
 
   match.status = MATCH_STATUS.COMPLETED;
+  match.isFinalized = true;
   match.timer.isRunning = false;
   match.timer.isPaused = false;
   match.timer.remainingTime = 0;
   match.timer.currentStage = TIMER_STAGES.COMPLETED;
 
+  // Accept optional body overrides from operator / finalize call
+  if (req.body) {
+    if (req.body.shootout) {
+      match.shootout = {
+        ...(match.shootout ? (typeof match.shootout.toObject === 'function' ? match.shootout.toObject() : match.shootout) : {}),
+        ...req.body.shootout,
+        isShootout: true,
+        isCompleted: true
+      };
+    }
+    if (typeof req.body.penaltyScoreA === 'number') {
+      match.shootout = match.shootout || {};
+      match.shootout.teamAPenaltyScore = req.body.penaltyScoreA;
+      match.shootout.isShootout = true;
+    }
+    if (typeof req.body.penaltyScoreB === 'number') {
+      match.shootout = match.shootout || {};
+      match.shootout.teamBPenaltyScore = req.body.penaltyScoreB;
+      match.shootout.isShootout = true;
+    }
+    if (req.body.shootoutWinner) {
+      match.shootout = match.shootout || {};
+      match.shootout.shootoutWinner = req.body.shootoutWinner;
+      match.shootout.isCompleted = true;
+      if (!req.body.winner) match.winner = req.body.shootoutWinner;
+    }
+    if (req.body.winner) {
+      match.winner = req.body.winner;
+    }
+    if (req.body.matchResult) {
+      match.matchResult = req.body.matchResult;
+    }
+  }
+
+  const teamAIdStr = (match.teamA?._id || match.teamA).toString();
+  const teamBIdStr = (match.teamB?._id || match.teamB).toString();
+  const teamAName = match.teamA?.name || 'Team A';
+  const teamBName = match.teamB?.name || 'Team B';
+
   if (match.teamAScore > match.teamBScore) {
-    match.winner = match.teamA;
-    match.matchResult = 'Regulation Win';
+    match.winner = match.teamA?._id || match.teamA;
+    match.matchResult = `${teamAName} Victory`;
   } else if (match.teamBScore > match.teamAScore) {
-    match.winner = match.teamB;
-    match.matchResult = 'Regulation Win';
+    match.winner = match.teamB?._id || match.teamB;
+    match.matchResult = `${teamBName} Victory`;
   } else {
     // Scores are tied! Check shootout or sudden-death toss results
     const penA = match.shootout?.teamAPenaltyScore ?? 0;
     const penB = match.shootout?.teamBPenaltyScore ?? 0;
-    if (match.shootout?.shootoutWinner) {
+    const hasPenalties = penA > 0 || penB > 0 || match.shootout?.isShootout;
+
+    if (match.winner) {
+      const isTeamAWinner = match.winner.toString() === teamAIdStr;
+      const winnerName = isTeamAWinner ? teamAName : teamBName;
+      if (hasPenalties) {
+        match.shootout = match.shootout || {};
+        match.shootout.isShootout = true;
+        match.shootout.isCompleted = true;
+        match.shootout.shootoutWinner = match.winner;
+        match.matchResult = `${winnerName} won (${penA} - ${penB}) on penalties`;
+      } else if (!match.matchResult || match.matchResult === 'Full Time Draw') {
+        match.matchResult = `${winnerName} Victory`;
+      }
+    } else if (match.shootout?.shootoutWinner) {
       match.winner = match.shootout.shootoutWinner;
-      const isTeamAWinner = match.winner.toString() === match.teamA._id.toString();
-      const winnerName = isTeamAWinner ? (match.teamA.name || 'Team A') : (match.teamB.name || 'Team B');
+      const isTeamAWinner = match.winner.toString() === teamAIdStr;
+      const winnerName = isTeamAWinner ? teamAName : teamBName;
       match.matchResult = `${winnerName} won (${penA} - ${penB}) on penalties`;
     } else if (penA > penB) {
-      match.winner = match.teamA;
+      match.winner = match.teamA?._id || match.teamA;
       match.shootout = match.shootout || {};
-      match.shootout.shootoutWinner = match.teamA;
+      match.shootout.shootoutWinner = match.winner;
+      match.shootout.isShootout = true;
       match.shootout.isCompleted = true;
-      const winnerName = match.teamA.name || 'Team A';
-      match.matchResult = `${winnerName} won (${penA} - ${penB}) on penalties`;
+      match.matchResult = `${teamAName} won (${penA} - ${penB}) on penalties`;
     } else if (penB > penA) {
-      match.winner = match.teamB;
+      match.winner = match.teamB?._id || match.teamB;
       match.shootout = match.shootout || {};
-      match.shootout.shootoutWinner = match.teamB;
+      match.shootout.shootoutWinner = match.winner;
+      match.shootout.isShootout = true;
       match.shootout.isCompleted = true;
-      const winnerName = match.teamB.name || 'Team B';
-      match.matchResult = `${winnerName} won (${penA} - ${penB}) on penalties`;
+      match.matchResult = `${teamBName} won (${penA} - ${penB}) on penalties`;
     } else if (match.toss?.winner) {
       match.winner = match.toss.winner;
-      const isTeamAWinner = match.winner.toString() === match.teamA._id.toString();
-      const winnerName = isTeamAWinner ? (match.teamA.name || 'Team A') : (match.teamB.name || 'Team B');
+      const isTeamAWinner = match.winner.toString() === teamAIdStr;
+      const winnerName = isTeamAWinner ? teamAName : teamBName;
       match.matchResult = `${winnerName} Sudden Death Victory`;
     } else {
-      match.matchResult = 'Full Time Draw';
+      match.matchResult = req.body?.matchResult || 'Full Time Draw';
     }
   }
 
@@ -159,13 +215,15 @@ const endMatch = asyncHandler(async (req, res) => {
     winner: match.winner,
     matchResult: match.matchResult,
     teamAScore: match.teamAScore,
-    teamBScore: match.teamBScore
+    teamBScore: match.teamBScore,
+    shootout: match.shootout
   });
 
   const updated = await Match.findById(match._id)
     .populate('teamA', 'name logo')
     .populate('teamB', 'name logo')
-    .populate('winner', 'name logo');
+    .populate('winner', 'name logo')
+    .populate('shootout.shootoutWinner', 'name logo');
 
   return ApiResponse.success(res, 'Match ended and finalized successfully', updated);
 });
