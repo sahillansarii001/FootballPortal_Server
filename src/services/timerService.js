@@ -40,15 +40,17 @@ class TimerService {
       return STAGE_DURATIONS[TIMER_STAGES.FIRST_HALF];
     }
 
-    if (match.status === MATCH_STATUS.COMPLETED || match.timer.currentStage === TIMER_STAGES.COMPLETED) {
-      return 0;
-    }
-
-    if (match.status === MATCH_STATUS.PENALTY_SHOOTOUT || match.timer.currentStage === TIMER_STAGES.PENALTY_SHOOTOUT) {
-      return 0;
-    }
-
     const { stageDuration, startedTimestamp, phaseEndsAt, isRunning, isPaused, remainingTime } = match.timer;
+
+    // Completed matches return 0 unless explicitly running with active remaining time
+    if ((match.status === MATCH_STATUS.COMPLETED || match.timer.currentStage === TIMER_STAGES.COMPLETED) && !isRunning && (!remainingTime || remainingTime <= 0)) {
+      return 0;
+    }
+
+    // Penalty shootout returns 0 unless active timer was explicitly started or set
+    if ((match.status === MATCH_STATUS.PENALTY_SHOOTOUT || match.timer.currentStage === TIMER_STAGES.PENALTY_SHOOTOUT) && !isRunning && (!remainingTime || remainingTime <= 0)) {
+      return 0;
+    }
 
     // Paused or not running: return exact saved remaining seconds
     if (!isRunning || isPaused) {
@@ -103,15 +105,9 @@ class TimerService {
     }
 
     if (match.status === MATCH_STATUS.PENALTY_SHOOTOUT) {
-      TimerService.logTimerAction('START_CLOCK_REJECTED', {
-        matchId,
-        prevStatus: 'PENALTY_SHOOTOUT',
-        newStatus: 'REJECTED',
-        phase: match.timer.currentStage,
-        remainingMs: 0,
-        userId: userId || 'OFFICIAL'
-      });
-      throw new Error('Match is in Penalty Shootout. Match timer does not run during penalties.');
+      match.status = MATCH_STATUS.LIVE;
+      match.timer.currentStage = TIMER_STAGES.EXTRA_TIME;
+      if (match.shootout) match.shootout.isShootout = false;
     }
 
     // If currently paused, resume it idempotently
@@ -246,7 +242,13 @@ class TimerService {
     }
 
     if (match.status === MATCH_STATUS.COMPLETED || match.status === MATCH_STATUS.PENALTY_SHOOTOUT) {
-      return match;
+      if (match.status === MATCH_STATUS.PENALTY_SHOOTOUT && (match.timer.remainingTime > 0)) {
+        match.status = MATCH_STATUS.LIVE;
+        match.timer.currentStage = TIMER_STAGES.EXTRA_TIME;
+        if (match.shootout) match.shootout.isShootout = false;
+      } else {
+        return match;
+      }
     }
 
     const remaining = TimerService.calculateRemainingTime(match);
@@ -347,7 +349,13 @@ class TimerService {
     }
 
     if (match.status === MATCH_STATUS.COMPLETED || match.status === MATCH_STATUS.PENALTY_SHOOTOUT) {
-      return match;
+      if (match.status === MATCH_STATUS.PENALTY_SHOOTOUT && (match.timer.remainingTime > 0)) {
+        match.status = MATCH_STATUS.LIVE;
+        match.timer.currentStage = TIMER_STAGES.EXTRA_TIME;
+        if (match.shootout) match.shootout.isShootout = false;
+      } else {
+        return match;
+      }
     }
 
     const savedRemaining = Math.max(0, match.timer.remainingTime ?? match.timer.stageDuration ?? 240);
@@ -577,21 +585,85 @@ class TimerService {
     }
 
     const currentRemaining = TimerService.calculateRemainingTime(match);
-    const newRemaining = currentRemaining + Number(secondsToAdd);
-    match.timer.remainingTime = newRemaining;
-    match.timer.stageDuration = (match.timer.stageDuration || 0) + Number(secondsToAdd);
+    const newRemaining = Math.max(0, currentRemaining) + Number(secondsToAdd);
+    const now = new Date();
+    const phaseEndsAt = new Date(now.getTime() + newRemaining * 1000);
 
-    if (match.timer.isRunning && !match.timer.isPaused) {
-      match.timer.phaseEndsAt = new Date(Date.now() + newRemaining * 1000);
-    } else if (!match.timer.isRunning) {
-      match.timer.isRunning = true;
-      match.timer.isPaused = false;
-      match.timer.startedTimestamp = new Date();
-      match.timer.phaseEndsAt = new Date(Date.now() + newRemaining * 1000);
-      match.timer.timerStatus = 'RUNNING';
+    match.timer.remainingTime = newRemaining;
+    match.timer.stageDuration = Math.max(match.timer.stageDuration || 0, newRemaining);
+    match.timer.startedTimestamp = now;
+    match.timer.phaseEndsAt = phaseEndsAt;
+    match.timer.pausedTimestamp = null;
+    match.timer.totalPausedDuration = 0;
+    match.timer.isRunning = true;
+    match.timer.isPaused = false;
+    match.timer.timerStatus = 'RUNNING';
+
+    // If match was in Penalty Shootout, Completed, or idle, bring it back to Live Extra Time
+    if (match.status === MATCH_STATUS.PENALTY_SHOOTOUT || match.timer.currentStage === TIMER_STAGES.PENALTY_SHOOTOUT || match.status === MATCH_STATUS.COMPLETED) {
+      match.status = MATCH_STATUS.LIVE;
+      match.timer.currentStage = TIMER_STAGES.EXTRA_TIME;
+      if (match.shootout) {
+        match.shootout.isShootout = false;
+      }
+    } else if (match.status === MATCH_STATUS.UPCOMING) {
+      match.status = MATCH_STATUS.LIVE;
+      match.timer.currentStage = match.timer.currentStage || TIMER_STAGES.FIRST_HALF;
     }
 
     await match.save();
+
+    TimerService.logTimerAction('ADD_TIME_SUCCESS', {
+      matchId,
+      prevStatus: 'UPDATED',
+      newStatus: 'RUNNING',
+      phase: match.timer.currentStage,
+      remainingMs: newRemaining * 1000,
+      userId: userId || 'OFFICIAL'
+    });
+
+    socketEmitter.broadcastStageChange(matchId, {
+      matchId,
+      previousStage: match.timer.currentStage,
+      currentStage: match.timer.currentStage,
+      status: match.status,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now()
+    });
+
+    socketEmitter.broadcastMatchPhaseChanged(matchId, {
+      matchId,
+      phase: match.timer.currentStage,
+      status: match.status,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now()
+    });
+
+    socketEmitter.broadcastTimerEvent(matchId, 'timer:sync', {
+      matchId,
+      currentStage: match.timer.currentStage,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: true,
+      isPaused: false
+    });
+
+    socketEmitter.broadcastTimerEvent(matchId, 'timer:started', {
+      matchId,
+      currentStage: match.timer.currentStage,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: true,
+      isPaused: false
+    });
 
     socketEmitter.broadcastTimerEvent(matchId, 'timer:updated', {
       matchId,
@@ -600,9 +672,30 @@ class TimerService {
       stageDuration: match.timer.stageDuration,
       phaseEndsAt: match.timer.phaseEndsAt,
       serverTime: Date.now(),
-      isRunning: match.timer.isRunning,
-      isPaused: match.timer.isPaused
+      isRunning: true,
+      isPaused: false
     });
+
+    socketEmitter.broadcastTimerUpdate(matchId, {
+      matchId,
+      currentStage: match.timer.currentStage,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: true,
+      isPaused: false,
+      teamAScore: match.teamAScore,
+      teamBScore: match.teamBScore
+    });
+
+    try {
+      const MatchService = require('./matchService');
+      const liveState = await MatchService.getLiveMatchState(matchId);
+      socketEmitter.broadcastMatchSync(matchId, liveState);
+    } catch (e) {
+      // fallback
+    }
 
     return match;
   }
@@ -805,16 +898,81 @@ class TimerService {
     }
 
     const newRemaining = Math.max(0, Number(seconds));
+    const now = new Date();
+    const phaseEndsAt = newRemaining > 0 ? new Date(now.getTime() + newRemaining * 1000) : null;
+
     match.timer.remainingTime = newRemaining;
     match.timer.stageDuration = Math.max(match.timer.stageDuration || 0, newRemaining);
+    match.timer.startedTimestamp = now;
+    match.timer.phaseEndsAt = phaseEndsAt;
+    match.timer.pausedTimestamp = null;
+    match.timer.totalPausedDuration = 0;
+    match.timer.isRunning = newRemaining > 0;
+    match.timer.isPaused = false;
+    match.timer.timerStatus = newRemaining > 0 ? 'RUNNING' : 'IDLE';
 
-    if (match.timer.isRunning && !match.timer.isPaused) {
-      match.timer.phaseEndsAt = new Date(Date.now() + newRemaining * 1000);
+    // If resetting time while in Penalty Shootout, Completed, or Upcoming:
+    if (newRemaining > 0) {
+      if (match.status === MATCH_STATUS.PENALTY_SHOOTOUT || match.status === MATCH_STATUS.COMPLETED || match.timer.currentStage === TIMER_STAGES.PENALTY_SHOOTOUT) {
+        match.status = MATCH_STATUS.LIVE;
+        if (newRemaining === 240) {
+          match.timer.currentStage = TIMER_STAGES.SECOND_HALF;
+        } else if (newRemaining === 120) {
+          match.timer.currentStage = TIMER_STAGES.EXTRA_TIME;
+        }
+        if (match.shootout) {
+          match.shootout.isShootout = false;
+        }
+      } else if (match.status === MATCH_STATUS.UPCOMING) {
+        match.status = MATCH_STATUS.LIVE;
+        match.timer.currentStage = TIMER_STAGES.FIRST_HALF;
+      }
     }
 
     await match.save();
 
+    TimerService.logTimerAction('SET_CLOCK_TIME_SUCCESS', {
+      matchId,
+      prevStatus: 'UPDATED',
+      newStatus: match.timer.timerStatus,
+      phase: match.timer.currentStage,
+      remainingMs: newRemaining * 1000,
+      userId: userId || 'OFFICIAL'
+    });
+
+    socketEmitter.broadcastStageChange(matchId, {
+      matchId,
+      previousStage: match.timer.currentStage,
+      currentStage: match.timer.currentStage,
+      status: match.status,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now()
+    });
+
+    socketEmitter.broadcastMatchPhaseChanged(matchId, {
+      matchId,
+      phase: match.timer.currentStage,
+      status: match.status,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now()
+    });
+
     socketEmitter.broadcastTimerEvent(matchId, 'timer:sync', {
+      matchId,
+      currentStage: match.timer.currentStage,
+      remainingTime: newRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: match.timer.isRunning,
+      isPaused: match.timer.isPaused
+    });
+
+    socketEmitter.broadcastTimerEvent(matchId, 'timer:started', {
       matchId,
       currentStage: match.timer.currentStage,
       remainingTime: newRemaining,
@@ -837,6 +995,14 @@ class TimerService {
       teamAScore: match.teamAScore,
       teamBScore: match.teamBScore
     });
+
+    try {
+      const MatchService = require('./matchService');
+      const liveState = await MatchService.getLiveMatchState(matchId);
+      socketEmitter.broadcastMatchSync(matchId, liveState);
+    } catch (e) {
+      // fallback
+    }
 
     return match;
   }

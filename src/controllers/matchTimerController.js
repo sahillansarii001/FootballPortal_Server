@@ -139,7 +139,11 @@ const addTime = asyncHandler(async (req, res) => {
     matchId: match._id,
     status: match.status,
     phase: match.timer.currentStage,
+    currentStage: match.timer.currentStage,
     timerStatus: match.timer.timerStatus,
+    isRunning: match.timer.isRunning,
+    isPaused: match.timer.isPaused,
+    remainingTime,
     remainingMs: remainingTime * 1000,
     phaseEndsAt: match.timer.phaseEndsAt,
     serverTime: Date.now(),
@@ -165,6 +169,8 @@ const setStage = asyncHandler(async (req, res) => {
     phase: match.timer.currentStage,
     currentStage: match.timer.currentStage,
     timerStatus: match.timer.timerStatus,
+    isRunning: match.timer.isRunning,
+    isPaused: match.timer.isPaused,
     remainingTime,
     remainingMs: remainingTime * 1000,
     phaseEndsAt: match.timer.phaseEndsAt,
@@ -190,9 +196,19 @@ const setClockTime = asyncHandler(async (req, res) => {
     phase: match.timer.currentStage,
     currentStage: match.timer.currentStage,
     timerStatus: match.timer.timerStatus,
+    isRunning: match.timer.isRunning,
+    isPaused: match.timer.isPaused,
     remainingTime,
     remainingMs: remainingTime * 1000,
     phaseEndsAt: match.timer.phaseEndsAt,
+    serverTime: Date.now(),
+    timer: {
+      ...match.timer.toObject(),
+      remainingTime,
+      remainingMs: remainingTime * 1000
+    }
+  });
+});
     serverTime: Date.now(),
     timer: {
       ...match.timer.toObject(),
