@@ -240,8 +240,12 @@ class MatchService {
     if (!match) return match;
     const TimerService = require('./timerService');
     const matchObj = typeof match.toObject === 'function' ? match.toObject() : match;
-    if (matchObj.timer && matchObj.timer.isRunning) {
-      matchObj.timer.remainingTime = TimerService.calculateRemainingTime(matchObj);
+    if (matchObj.timer) {
+      const remainingTime = TimerService.calculateRemainingTime(matchObj);
+      matchObj.timer.remainingTime = remainingTime;
+      matchObj.timer.remainingMs = remainingTime * 1000;
+      matchObj.timer.serverTime = Date.now();
+      matchObj.timer.timerStatus = matchObj.timer.timerStatus || (matchObj.timer.isRunning ? (matchObj.timer.isPaused ? 'PAUSED' : 'RUNNING') : 'NOT_STARTED');
     }
     return matchObj;
   }
@@ -373,6 +377,7 @@ class MatchService {
       .sort({ timestamp: 1, createdAt: 1 });
 
     return {
+      _id: match._id,
       matchId: match._id,
       matchNumber: match.matchNumber,
       tournament: match.tournament,
@@ -390,12 +395,16 @@ class MatchService {
         currentStage: match.timer.currentStage,
         stageDuration: match.timer.stageDuration,
         remainingTime,
+        remainingMs: remainingTime * 1000,
         isRunning: match.timer.isRunning,
         isPaused: match.timer.isPaused,
+        phaseEndsAt: match.timer.phaseEndsAt,
+        timerStatus: match.timer.timerStatus || (match.timer.isRunning ? (match.timer.isPaused ? 'PAUSED' : 'RUNNING') : 'NOT_STARTED'),
         startedTimestamp: match.timer.startedTimestamp,
         pausedTimestamp: match.timer.pausedTimestamp,
         totalPausedDuration: match.timer.totalPausedDuration,
-        stageHistory: match.timer.stageHistory
+        stageHistory: match.timer.stageHistory,
+        serverTime: Date.now()
       },
       currentStage: match.timer.currentStage,
       winner: match.winner,

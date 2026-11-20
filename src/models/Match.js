@@ -58,6 +58,19 @@ const timerSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    phaseEndsAt: {
+      type: Date,
+      default: null
+    },
+    lastTransitionAt: {
+      type: Date,
+      default: null
+    },
+    timerStatus: {
+      type: String,
+      enum: ['NOT_STARTED', 'IDLE', 'RUNNING', 'PAUSED', 'COMPLETED'],
+      default: 'NOT_STARTED'
+    },
     stageHistory: [stageHistorySchema]
   },
   { _id: false }

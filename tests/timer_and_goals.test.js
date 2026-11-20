@@ -138,25 +138,20 @@ describe('Live Match Timer & Goal Management Suite', () => {
       expect(resetRes.body.data.timer.isRunning).toBe(false);
     });
 
-    it('should advance stages in order: First Half -> Transition Gap -> Half-Time -> Second Half -> Completed', async () => {
+    it('should advance stages in order: First Half -> Half-Time -> Second Half -> Completed', async () => {
       await request(app).post(`/api/matches/${matchId}/timer/start`).set('Authorization', `Bearer ${operatorToken}`);
 
-      // Advance from First Half -> Transition Gap (20s)
+      // Advance from First Half -> Half-Time (120s)
       const stage1 = await request(app).post(`/api/matches/${matchId}/timer/advance`).set('Authorization', `Bearer ${operatorToken}`);
-      expect(stage1.body.data.timer.currentStage).toBe(TIMER_STAGES.TRANSITION_GAP);
-      expect(stage1.body.data.timer.stageDuration).toBe(20);
-
-      // Advance from Transition Gap -> Half-Time (120s)
-      const stage2 = await request(app).post(`/api/matches/${matchId}/timer/advance`).set('Authorization', `Bearer ${operatorToken}`);
-      expect(stage2.body.data.timer.currentStage).toBe(TIMER_STAGES.HALF_TIME);
-      expect(stage2.body.data.timer.stageDuration).toBe(120);
-      expect(stage2.body.data.status).toBe('Half-Time');
+      expect(stage1.body.data.timer.currentStage).toBe(TIMER_STAGES.HALF_TIME);
+      expect(stage1.body.data.timer.stageDuration).toBe(120);
+      expect(stage1.body.data.status).toBe('Half-Time');
 
       // Advance from Half-Time -> Second Half (240s)
-      const stage3 = await request(app).post(`/api/matches/${matchId}/timer/advance`).set('Authorization', `Bearer ${operatorToken}`);
-      expect(stage3.body.data.timer.currentStage).toBe(TIMER_STAGES.SECOND_HALF);
-      expect(stage3.body.data.timer.stageDuration).toBe(240);
-      expect(stage3.body.data.status).toBe('Live');
+      const stage2 = await request(app).post(`/api/matches/${matchId}/timer/advance`).set('Authorization', `Bearer ${operatorToken}`);
+      expect(stage2.body.data.timer.currentStage).toBe(TIMER_STAGES.SECOND_HALF);
+      expect(stage2.body.data.timer.stageDuration).toBe(240);
+      expect(stage2.body.data.status).toBe('Live');
     });
   });
 

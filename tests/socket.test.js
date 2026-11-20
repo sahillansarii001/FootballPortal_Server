@@ -47,7 +47,7 @@ describe('Socket.IO Real-Time Suite', () => {
   it('should receive broadcasted score updates within match room', (done) => {
     const testMatchId = '654321654321654321654321';
 
-    clientSocket.on('score:update', (data) => {
+    clientSocket.once('score:update', (data) => {
       expect(data.matchId).toBe(testMatchId);
       expect(data.teamAScore).toBe(2);
       expect(data.teamBScore).toBe(1);
@@ -64,7 +64,7 @@ describe('Socket.IO Real-Time Suite', () => {
   it('should receive broadcasted timer updates within match room', (done) => {
     const testMatchId = '654321654321654321654321';
 
-    clientSocket.on('timer:update', (data) => {
+    clientSocket.once('timer:update', (data) => {
       expect(data.matchId).toBe(testMatchId);
       expect(data.remainingTime).toBe(230);
       expect(data.currentStage).toBe('First Half');

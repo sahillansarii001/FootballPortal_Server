@@ -18,35 +18,53 @@ const activeTickerLocks = new Set();
 
 class TimerService {
   /**
-   * Pure timestamp calculation of remaining seconds
+   * Structured Diagnostic Logger for Match Timer Architecture
+   */
+  static logTimerAction(action, details) {
+    const { matchId, prevStatus, newStatus, phase, remainingMs, source = 'API', userId = 'OFFICIAL' } = details;
+    logger.info(
+      `[TIMER_DIAGNOSTIC] [${action}] Match: ${matchId} | Prev: ${prevStatus} -> New: ${newStatus} | Phase: ${phase} | RemainingMs: ${remainingMs}ms | Source: ${source} | User: ${userId}`
+    );
+  }
+
+  /**
+   * Pure timestamp calculation of remaining seconds based on authoritative phaseEndsAt.
+   * For running timer: remainingMs = max(0, phaseEndsAt - currentServerTime)
+   * For paused timer: remainingMs = savedRemainingMs
    */
   static calculateRemainingTime(match) {
-    if (!match.timer) {
+    if (!match || !match.timer) {
       return STAGE_DURATIONS[TIMER_STAGES.FIRST_HALF];
     }
 
-    const { stageDuration, startedTimestamp, pausedTimestamp, totalPausedDuration, isRunning, isPaused, remainingTime } = match.timer;
-
-    if (!isRunning) {
-      return remainingTime ?? stageDuration;
+    if (match.status === MATCH_STATUS.COMPLETED || match.timer.currentStage === TIMER_STAGES.COMPLETED) {
+      return 0;
     }
 
-    if (isPaused) {
-      return remainingTime;
+    if (match.status === MATCH_STATUS.PENALTY_SHOOTOUT || match.timer.currentStage === TIMER_STAGES.PENALTY_SHOOTOUT) {
+      return 0;
     }
 
-    if (!startedTimestamp) {
-      return stageDuration;
+    const { stageDuration, startedTimestamp, phaseEndsAt, isRunning, isPaused, remainingTime } = match.timer;
+
+    // Paused or not running: return exact saved remaining seconds
+    if (!isRunning || isPaused) {
+      return Math.max(0, typeof remainingTime === 'number' ? remainingTime : (stageDuration || 240));
     }
 
-    const now = Date.now();
-    const started = new Date(startedTimestamp).getTime();
-    const pausedTotal = totalPausedDuration || 0;
-    const activeElapsedMs = Math.max(0, now - started - pausedTotal);
-    const activeElapsedSec = Math.floor(activeElapsedMs / 1000);
-    const calculatedRemaining = Math.max(0, stageDuration - activeElapsedSec);
+    // Running with phaseEndsAt timestamp (authoritative source of truth)
+    if (phaseEndsAt) {
+      const remainingMs = new Date(phaseEndsAt).getTime() - Date.now();
+      return Math.max(0, Math.ceil(remainingMs / 1000));
+    }
 
-    return calculatedRemaining;
+    // Fallback if phaseEndsAt not set yet
+    if (startedTimestamp) {
+      const elapsedSec = Math.floor((Date.now() - new Date(startedTimestamp).getTime()) / 1000);
+      return Math.max(0, (stageDuration || 240) - elapsedSec);
+    }
+
+    return stageDuration || 240;
   }
 
   /**
@@ -58,38 +76,49 @@ class TimerService {
       throw new Error('Match not found');
     }
 
+    const prevStatus = match.timer.timerStatus || (match.timer.isRunning ? (match.timer.isPaused ? 'PAUSED' : 'RUNNING') : 'NOT_STARTED');
+    TimerService.logTimerAction('START_CLOCK_REQUESTED', {
+      matchId,
+      prevStatus,
+      newStatus: 'RUNNING',
+      phase: match.timer.currentStage || TIMER_STAGES.FIRST_HALF,
+      remainingMs: (match.timer.remainingTime || 240) * 1000,
+      userId: userId || 'OFFICIAL'
+    });
+
+    // Prevent timer on completed match unless reset
     if (match.status === MATCH_STATUS.COMPLETED) {
-      // Re-opening/restarting a completed match: reset scores, shootout, and finalize flag
-      match.status = MATCH_STATUS.UPCOMING;
-      match.isFinalized = false;
-      match.teamAScore = 0;
-      match.teamBScore = 0;
-      match.winner = null;
-      match.matchResult = '';
-      match.goals = [];
-      match.shootout = {
-        isShootout: false,
-        teamAPenaltyScore: 0,
-        teamBPenaltyScore: 0,
-        teamAPenaltiesTaken: 0,
-        teamBPenaltiesTaken: 0,
-        round: 0,
-        isSuddenDeath: false,
-        isCompleted: false,
-        shootoutWinner: null
-      };
-      if (match.tournament) {
-        await StandingsService.recalculateTournamentStandings(match.tournament);
-      }
+      TimerService.logTimerAction('START_CLOCK_REJECTED', {
+        matchId,
+        prevStatus: 'COMPLETED',
+        newStatus: 'REJECTED',
+        phase: match.timer.currentStage,
+        remainingMs: 0,
+        userId: userId || 'OFFICIAL'
+      });
+      throw new Error('Cannot start timer on completed match. Reset match first.');
     }
 
-    // If currently paused, resume it
+    if (match.status === MATCH_STATUS.PENALTY_SHOOTOUT) {
+      TimerService.logTimerAction('START_CLOCK_REJECTED', {
+        matchId,
+        prevStatus: 'PENALTY_SHOOTOUT',
+        newStatus: 'REJECTED',
+        phase: match.timer.currentStage,
+        remainingMs: 0,
+        userId: userId || 'OFFICIAL'
+      });
+      throw new Error('Match is in Penalty Shootout. Match timer does not run during penalties.');
+    }
+
+    // If currently paused, resume it idempotently
     if (match.timer.isRunning && match.timer.isPaused) {
       return TimerService.resumeTimer(matchId, userId);
     }
 
+    // If already running, return current match idempotently without changing timestamps
     if (match.timer.isRunning && !match.timer.isPaused) {
-      return match; // Already running
+      return match;
     }
 
     const isInitialStart = match.status === MATCH_STATUS.UPCOMING;
@@ -98,18 +127,39 @@ class TimerService {
 
     const currentStage = match.timer.currentStage || TIMER_STAGES.FIRST_HALF;
     const stageDuration = STAGE_DURATIONS[currentStage] || halfDuration;
+    const now = new Date();
+    const phaseEndsAt = new Date(now.getTime() + stageDuration * 1000);
 
     match.status = currentStage === TIMER_STAGES.HALF_TIME ? MATCH_STATUS.HALF_TIME : MATCH_STATUS.LIVE;
     match.timer.currentStage = currentStage;
     match.timer.stageDuration = stageDuration;
     match.timer.remainingTime = stageDuration;
-    match.timer.startedTimestamp = new Date();
+    match.timer.startedTimestamp = now;
+    match.timer.phaseEndsAt = phaseEndsAt;
     match.timer.pausedTimestamp = null;
     match.timer.totalPausedDuration = 0;
     match.timer.isRunning = true;
     match.timer.isPaused = false;
+    match.timer.timerStatus = 'RUNNING';
 
     await match.save();
+
+    TimerService.logTimerAction('START_CLOCK_SUCCESS', {
+      matchId,
+      prevStatus,
+      newStatus: 'RUNNING',
+      phase: currentStage,
+      remainingMs: stageDuration * 1000,
+      userId: userId || 'OFFICIAL'
+    });
+    TimerService.logTimerAction('TIMER_STATE_CHANGED', {
+      matchId,
+      prevStatus,
+      newStatus: 'RUNNING',
+      phase: currentStage,
+      remainingMs: stageDuration * 1000,
+      userId: userId || 'OFFICIAL'
+    });
 
     // If starting fresh from Upcoming, record MATCH_STARTED event
     if (isInitialStart) {
@@ -119,7 +169,7 @@ class TimerService {
         type: EVENT_TYPES.MATCH_STARTED,
         stage: currentStage,
         matchTime: '04:00',
-        timestamp: new Date(),
+        timestamp: now,
         detail: { stage: currentStage, stageDuration },
         createdBy: userId
       });
@@ -133,19 +183,32 @@ class TimerService {
       type: EVENT_TYPES.TIMER_STARTED,
       stage: currentStage,
       matchTime: `${stageDuration}s remaining`,
-      timestamp: new Date(),
+      timestamp: now,
       detail: { stage: currentStage, stageDuration },
       createdBy: userId
     });
     match.events.push(timerStartEvent._id);
     await match.save();
 
-    // Broadcast
+    // Broadcast authoritative state
     socketEmitter.broadcastTimerEvent(matchId, 'timer:started', {
       matchId,
       currentStage,
       remainingTime: stageDuration,
       stageDuration,
+      phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: true,
+      isPaused: false
+    });
+
+    socketEmitter.broadcastTimerEvent(matchId, 'timer:sync', {
+      matchId,
+      currentStage,
+      remainingTime: stageDuration,
+      stageDuration,
+      phaseEndsAt,
+      serverTime: Date.now(),
       isRunning: true,
       isPaused: false
     });
@@ -155,6 +218,8 @@ class TimerService {
 
   /**
    * Pause match timer
+   * Freezes remaining time, saves exact remaining seconds to MongoDB, clears phaseEndsAt.
+   * Repeated pause requests are completely idempotent.
    */
   static async pauseTimer(matchId, userId = null) {
     const match = await Match.findById(matchId);
@@ -162,17 +227,52 @@ class TimerService {
       throw new Error('Match not found');
     }
 
+    const prevStatus = match.timer.timerStatus || (match.timer.isRunning ? (match.timer.isPaused ? 'PAUSED' : 'RUNNING') : 'NOT_STARTED');
+    TimerService.logTimerAction('PAUSE_CLOCK_REQUESTED', {
+      matchId,
+      prevStatus,
+      newStatus: 'PAUSED',
+      phase: match.timer.currentStage,
+      remainingMs: (match.timer.remainingTime || 0) * 1000,
+      userId: userId || 'OFFICIAL'
+    });
+
+    // If not running or already paused, return idempotently
     if (!match.timer.isRunning || match.timer.isPaused) {
-      return match; // Not running or already paused
+      return match;
+    }
+
+    if (match.status === MATCH_STATUS.COMPLETED || match.status === MATCH_STATUS.PENALTY_SHOOTOUT) {
+      return match;
     }
 
     const remaining = TimerService.calculateRemainingTime(match);
+    const now = new Date();
 
     match.timer.remainingTime = remaining;
     match.timer.isPaused = true;
-    match.timer.pausedTimestamp = new Date();
+    match.timer.phaseEndsAt = null; // Cleared while paused
+    match.timer.pausedTimestamp = now;
+    match.timer.timerStatus = 'PAUSED';
 
     await match.save();
+
+    TimerService.logTimerAction('PAUSE_CLOCK_SUCCESS', {
+      matchId,
+      prevStatus,
+      newStatus: 'PAUSED',
+      phase: match.timer.currentStage,
+      remainingMs: remaining * 1000,
+      userId: userId || 'OFFICIAL'
+    });
+    TimerService.logTimerAction('TIMER_STATE_CHANGED', {
+      matchId,
+      prevStatus,
+      newStatus: 'PAUSED',
+      phase: match.timer.currentStage,
+      remainingMs: remaining * 1000,
+      userId: userId || 'OFFICIAL'
+    });
 
     // Record event
     const event = await MatchEvent.create({
@@ -181,8 +281,8 @@ class TimerService {
       type: EVENT_TYPES.TIMER_PAUSED,
       stage: match.timer.currentStage,
       matchTime: `${remaining}s remaining`,
-      timestamp: new Date(),
-      detail: { remainingTime: remaining, pausedAt: match.timer.pausedTimestamp },
+      timestamp: now,
+      detail: { remainingTime: remaining, pausedAt: now },
       createdBy: userId
     });
     match.events.push(event._id);
@@ -193,6 +293,19 @@ class TimerService {
       currentStage: match.timer.currentStage,
       remainingTime: remaining,
       stageDuration: match.timer.stageDuration,
+      phaseEndsAt: null,
+      serverTime: Date.now(),
+      isRunning: true,
+      isPaused: true
+    });
+
+    socketEmitter.broadcastTimerEvent(matchId, 'timer:sync', {
+      matchId,
+      currentStage: match.timer.currentStage,
+      remainingTime: remaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt: null,
+      serverTime: Date.now(),
       isRunning: true,
       isPaused: true
     });
@@ -202,6 +315,8 @@ class TimerService {
 
   /**
    * Resume match timer
+   * Reads saved remaining seconds and creates new phaseEndsAt = Date.now() + remainingTime * 1000.
+   * Repeated resume requests are completely idempotent.
    */
   static async resumeTimer(matchId, userId = null) {
     const match = await Match.findById(matchId);
@@ -209,27 +324,65 @@ class TimerService {
       throw new Error('Match not found');
     }
 
+    const prevStatus = match.timer.timerStatus || (match.timer.isRunning ? (match.timer.isPaused ? 'PAUSED' : 'RUNNING') : 'NOT_STARTED');
+    TimerService.logTimerAction('RESUME_CLOCK_REQUESTED', {
+      matchId,
+      prevStatus,
+      newStatus: 'RUNNING',
+      phase: match.timer.currentStage,
+      remainingMs: (match.timer.remainingTime || 240) * 1000,
+      userId: userId || 'OFFICIAL'
+    });
+
     if (!match.timer.isRunning) {
       return TimerService.startTimer(matchId, userId);
     }
 
+    // Already running and not paused: return idempotently
     if (!match.timer.isPaused) {
       return match;
     }
 
-    const now = Date.now();
-    const pausedAt = match.timer.pausedTimestamp ? new Date(match.timer.pausedTimestamp).getTime() : now;
-    const additionalPausedMs = Math.max(0, now - pausedAt);
+    if (match.status === MATCH_STATUS.COMPLETED || match.status === MATCH_STATUS.PENALTY_SHOOTOUT) {
+      return match;
+    }
 
-    match.timer.totalPausedDuration = (match.timer.totalPausedDuration || 0) + additionalPausedMs;
+    const savedRemaining = Math.max(0, match.timer.remainingTime ?? match.timer.stageDuration ?? 240);
+
+    // If remaining time already reached 0 while paused, advance stage instead
+    if (savedRemaining <= 0) {
+      return TimerService.advanceStage(matchId);
+    }
+
+    const now = new Date();
+    const phaseEndsAt = new Date(now.getTime() + savedRemaining * 1000);
+
+    match.timer.phaseEndsAt = phaseEndsAt;
+    match.timer.startedTimestamp = now;
     match.timer.pausedTimestamp = null;
     match.timer.isPaused = false;
-
-    // Remaining time is preserved accurately
-    const remaining = TimerService.calculateRemainingTime(match);
-    match.timer.remainingTime = remaining;
+    match.timer.isRunning = true;
+    match.timer.timerStatus = 'RUNNING';
+    match.timer.remainingTime = savedRemaining;
 
     await match.save();
+
+    TimerService.logTimerAction('RESUME_CLOCK_SUCCESS', {
+      matchId,
+      prevStatus,
+      newStatus: 'RUNNING',
+      phase: match.timer.currentStage,
+      remainingMs: savedRemaining * 1000,
+      userId: userId || 'OFFICIAL'
+    });
+    TimerService.logTimerAction('TIMER_STATE_CHANGED', {
+      matchId,
+      prevStatus,
+      newStatus: 'RUNNING',
+      phase: match.timer.currentStage,
+      remainingMs: savedRemaining * 1000,
+      userId: userId || 'OFFICIAL'
+    });
 
     // Record event
     const event = await MatchEvent.create({
@@ -237,9 +390,9 @@ class TimerService {
       tournament: match.tournament,
       type: EVENT_TYPES.TIMER_RESUMED,
       stage: match.timer.currentStage,
-      matchTime: `${remaining}s remaining`,
-      timestamp: new Date(),
-      detail: { resumedAt: new Date(), remainingTime: remaining },
+      matchTime: `${savedRemaining}s remaining`,
+      timestamp: now,
+      detail: { resumedAt: now, remainingTime: savedRemaining },
       createdBy: userId
     });
     match.events.push(event._id);
@@ -248,8 +401,21 @@ class TimerService {
     socketEmitter.broadcastTimerEvent(matchId, 'timer:resumed', {
       matchId,
       currentStage: match.timer.currentStage,
-      remainingTime: remaining,
+      remainingTime: savedRemaining,
       stageDuration: match.timer.stageDuration,
+      phaseEndsAt,
+      serverTime: Date.now(),
+      isRunning: true,
+      isPaused: false
+    });
+
+    socketEmitter.broadcastTimerEvent(matchId, 'timer:sync', {
+      matchId,
+      currentStage: match.timer.currentStage,
+      remainingTime: savedRemaining,
+      stageDuration: match.timer.stageDuration,
+      phaseEndsAt,
+      serverTime: Date.now(),
       isRunning: true,
       isPaused: false
     });
@@ -291,10 +457,12 @@ class TimerService {
     match.timer.stageDuration = halfDuration;
     match.timer.remainingTime = halfDuration;
     match.timer.startedTimestamp = null;
+    match.timer.phaseEndsAt = null;
     match.timer.pausedTimestamp = null;
     match.timer.totalPausedDuration = 0;
     match.timer.isRunning = false;
     match.timer.isPaused = false;
+    match.timer.timerStatus = 'IDLE';
     match.timer.stageHistory = [];
 
     await match.save();
@@ -322,6 +490,8 @@ class TimerService {
       currentStage: TIMER_STAGES.FIRST_HALF,
       remainingTime: halfDuration,
       stageDuration: halfDuration,
+      phaseEndsAt: null,
+      serverTime: Date.now(),
       isRunning: false,
       isPaused: false
     });
@@ -330,7 +500,7 @@ class TimerService {
   }
 
   /**
-   * Add extra time (e.g. 2 minutes for draw decider or custom seconds) to timer
+   * Add extra time (seconds) to timer
    */
   static async addTime(matchId, secondsToAdd = 120, userId = null) {
     const match = await Match.findById(matchId);
@@ -343,10 +513,14 @@ class TimerService {
     match.timer.remainingTime = newRemaining;
     match.timer.stageDuration = (match.timer.stageDuration || 0) + Number(secondsToAdd);
 
-    if (!match.timer.isRunning) {
+    if (match.timer.isRunning && !match.timer.isPaused) {
+      match.timer.phaseEndsAt = new Date(Date.now() + newRemaining * 1000);
+    } else if (!match.timer.isRunning) {
       match.timer.isRunning = true;
       match.timer.isPaused = false;
       match.timer.startedTimestamp = new Date();
+      match.timer.phaseEndsAt = new Date(Date.now() + newRemaining * 1000);
+      match.timer.timerStatus = 'RUNNING';
     }
 
     await match.save();
@@ -356,6 +530,8 @@ class TimerService {
       currentStage: match.timer.currentStage,
       remainingTime: newRemaining,
       stageDuration: match.timer.stageDuration,
+      phaseEndsAt: match.timer.phaseEndsAt,
+      serverTime: Date.now(),
       isRunning: match.timer.isRunning,
       isPaused: match.timer.isPaused
     });
@@ -364,13 +540,18 @@ class TimerService {
   }
 
   /**
-   * Automatically transition to next stage when stage time expires
+   * Automatically transition to next stage when stage time expires.
+   * Phase Progression:
+   * FIRST_HALF (4m) -> HALF_TIME (2m) -> SECOND_HALF (4m) -> EXTRA_TIME (2m if tied) -> PENALTIES (if tied) -> COMPLETED
+   * If a team leads after second half or extra time, match completes directly.
+   * Protected with atomic lock to guarantee exactly-once transition.
    */
   static async advanceStage(matchId) {
-    if (activeTickerLocks.has(matchId.toString())) {
+    const lockKey = matchId.toString();
+    if (activeTickerLocks.has(lockKey)) {
       return null;
     }
-    activeTickerLocks.add(matchId.toString());
+    activeTickerLocks.add(lockKey);
 
     try {
       const match = await Match.findById(matchId);
@@ -378,28 +559,32 @@ class TimerService {
         return null;
       }
 
+      // Completed matches can never advance
+      if (match.status === MATCH_STATUS.COMPLETED || match.timer.currentStage === TIMER_STAGES.COMPLETED) {
+        return match;
+      }
+
       const currentStage = match.timer.currentStage;
       let nextStage;
 
-      // Handle Stage Transition with 2-Minute Draw Decider rule:
-      // If regulation ends in a draw (e.g. 1-1), 2 minutes extra time is awarded
+      // Phase Progression Engine
       if (currentStage === TIMER_STAGES.FIRST_HALF) {
-        nextStage = TIMER_STAGES.TRANSITION_GAP;
+        nextStage = TIMER_STAGES.HALF_TIME;
       } else if (currentStage === TIMER_STAGES.TRANSITION_GAP) {
         nextStage = TIMER_STAGES.HALF_TIME;
       } else if (currentStage === TIMER_STAGES.HALF_TIME) {
         nextStage = TIMER_STAGES.SECOND_HALF;
       } else if (currentStage === TIMER_STAGES.SECOND_HALF) {
         if (match.teamAScore === match.teamBScore) {
-          nextStage = TIMER_STAGES.EXTRA_TIME; // Draw -> 2 more minutes
+          nextStage = TIMER_STAGES.EXTRA_TIME; // Scores tied -> 2-minute extra time
         } else {
-          nextStage = TIMER_STAGES.COMPLETED;
+          nextStage = TIMER_STAGES.COMPLETED;  // Lead -> match complete
         }
       } else if (currentStage === TIMER_STAGES.EXTRA_TIME) {
         if (match.teamAScore === match.teamBScore) {
-          nextStage = TIMER_STAGES.PENALTY_SHOOTOUT;
+          nextStage = TIMER_STAGES.PENALTY_SHOOTOUT; // Still tied -> penalty shootout
         } else {
-          nextStage = TIMER_STAGES.COMPLETED;
+          nextStage = TIMER_STAGES.COMPLETED;        // Lead -> match complete
         }
       } else {
         return match;
@@ -413,7 +598,16 @@ class TimerService {
         durationSeconds: match.timer.stageDuration
       });
 
-      // Specific event for first half completion
+      TimerService.logTimerAction('PHASE_TRANSITION', {
+        matchId,
+        prevStatus: currentStage,
+        newStatus: nextStage,
+        phase: nextStage,
+        remainingMs: (STAGE_DURATIONS[nextStage] || 0) * 1000,
+        userId: 'TICKER_AUTO'
+      });
+
+      // Milestone event for first half completion
       if (currentStage === TIMER_STAGES.FIRST_HALF) {
         const firstHalfEndEvent = await MatchEvent.create({
           match: match._id,
@@ -428,30 +622,31 @@ class TimerService {
       }
 
       const tournament = await Tournament.findById(match.tournament);
-      let nextStageDuration = STAGE_DURATIONS[nextStage];
+      let nextStageDuration = STAGE_DURATIONS[nextStage] || 0;
 
       // Respect tournament custom rules if configured
       if (tournament?.rules) {
-        if (nextStage === TIMER_STAGES.TRANSITION_GAP && tournament.rules.transitionDurationSeconds) {
-          nextStageDuration = tournament.rules.transitionDurationSeconds;
-        } else if (nextStage === TIMER_STAGES.HALF_TIME && tournament.rules.halfTimeDurationSeconds) {
+        if (nextStage === TIMER_STAGES.HALF_TIME && tournament.rules.halfTimeDurationSeconds) {
           nextStageDuration = tournament.rules.halfTimeDurationSeconds;
         } else if (nextStage === TIMER_STAGES.SECOND_HALF && tournament.rules.halfDurationSeconds) {
           nextStageDuration = tournament.rules.halfDurationSeconds;
         }
       }
 
-      // Check if next stage is Penalty Shootout (e.g. after tied 2-minute Extra Time)
+      // Case A: Penalty Shootout (tied after Extra Time)
       if (nextStage === TIMER_STAGES.PENALTY_SHOOTOUT) {
         match.timer.currentStage = TIMER_STAGES.PENALTY_SHOOTOUT;
         match.timer.stageDuration = 0;
         match.timer.remainingTime = 0;
+        match.timer.phaseEndsAt = null;
         match.timer.isRunning = false;
         match.timer.isPaused = false;
+        match.timer.timerStatus = 'COMPLETED';
         match.status = MATCH_STATUS.PENALTY_SHOOTOUT;
         match.shootout = match.shootout || {};
         match.shootout.isShootout = true;
         match.matchResult = 'Extra Time Draw - Penalty Shootout Active';
+        match.timer.lastTransitionAt = new Date();
         await match.save();
 
         socketEmitter.broadcastStageChange(matchId, {
@@ -464,23 +659,32 @@ class TimerService {
           needsShootout: true
         });
 
+        socketEmitter.broadcastMatchPhaseChanged(matchId, {
+          matchId,
+          phase: TIMER_STAGES.PENALTY_SHOOTOUT,
+          status: MATCH_STATUS.PENALTY_SHOOTOUT,
+          needsShootout: true
+        });
+
         return match;
       }
 
-      // Check if next stage is Match Completed
+      // Case B: Match Completed
       if (nextStage === TIMER_STAGES.COMPLETED) {
         match.timer.currentStage = TIMER_STAGES.COMPLETED;
         match.timer.stageDuration = 0;
         match.timer.remainingTime = 0;
+        match.timer.phaseEndsAt = null;
         match.timer.isRunning = false;
         match.timer.isPaused = false;
+        match.timer.timerStatus = 'COMPLETED';
+        match.timer.lastTransitionAt = new Date();
 
-        // Check scores for tie
         if (match.teamAScore === match.teamBScore) {
-          // Tie requires penalty shootout
+          // If second half completed tied and extra time was skipped, fallback to shootout
           match.status = MATCH_STATUS.PENALTY_SHOOTOUT;
           match.shootout.isShootout = true;
-          match.matchResult = 'Full Time Draw - Penalty Shootout Required';
+          match.matchResult = 'Draw - Penalty Shootout Required';
           await match.save();
 
           socketEmitter.broadcastStageChange(matchId, {
@@ -493,10 +697,10 @@ class TimerService {
             needsShootout: true
           });
         } else {
-          // Official regular time completion
+          // Normal Time / Extra Time Win
           match.status = MATCH_STATUS.COMPLETED;
           match.winner = match.teamAScore > match.teamBScore ? match.teamA : match.teamB;
-          match.matchResult = 'Normal Time Win';
+          match.matchResult = currentStage === TIMER_STAGES.EXTRA_TIME ? 'Extra Time Win' : 'Normal Time Win';
           await match.save();
 
           await TimerService.finalizeMatch(match._id);
@@ -527,15 +731,21 @@ class TimerService {
         match.events.push(matchCompleteEvent._id);
         await match.save();
       } else {
-        // Transition to next non-terminal stage
+        // Case C: Transition to next running stage (Half-Time, Second Half, Extra Time)
+        const now = new Date();
+        const phaseEndsAt = new Date(now.getTime() + nextStageDuration * 1000);
+
         match.timer.currentStage = nextStage;
         match.timer.stageDuration = nextStageDuration;
         match.timer.remainingTime = nextStageDuration;
-        match.timer.startedTimestamp = new Date();
+        match.timer.startedTimestamp = now;
+        match.timer.phaseEndsAt = phaseEndsAt;
         match.timer.pausedTimestamp = null;
         match.timer.totalPausedDuration = 0;
         match.timer.isRunning = true;
         match.timer.isPaused = false;
+        match.timer.timerStatus = 'RUNNING';
+        match.timer.lastTransitionAt = now;
 
         if (nextStage === TIMER_STAGES.HALF_TIME) {
           match.status = MATCH_STATUS.HALF_TIME;
@@ -545,18 +755,17 @@ class TimerService {
 
         await match.save();
 
-        // Determine specific milestone event type
         let stageEventType = EVENT_TYPES.STAGE_CHANGE;
         let eventMatchTime = 'Stage Kickoff';
-        if (nextStage === TIMER_STAGES.TRANSITION_GAP) {
-          stageEventType = EVENT_TYPES.TRANSITION_STARTED;
-          eventMatchTime = '00:20';
-        } else if (nextStage === TIMER_STAGES.HALF_TIME) {
+        if (nextStage === TIMER_STAGES.HALF_TIME) {
           stageEventType = EVENT_TYPES.HALFTIME_STARTED;
           eventMatchTime = '02:00';
         } else if (nextStage === TIMER_STAGES.SECOND_HALF) {
           stageEventType = EVENT_TYPES.SECOND_HALF_STARTED;
           eventMatchTime = '04:00';
+        } else if (nextStage === TIMER_STAGES.EXTRA_TIME) {
+          stageEventType = EVENT_TYPES.STAGE_CHANGE;
+          eventMatchTime = '02:00 (ET)';
         }
 
         const stageEvent = await MatchEvent.create({
@@ -565,7 +774,7 @@ class TimerService {
           type: stageEventType,
           stage: nextStage,
           matchTime: eventMatchTime,
-          timestamp: new Date(),
+          timestamp: now,
           detail: { previousStage: currentStage, newStage: nextStage, duration: nextStageDuration }
         });
         match.events.push(stageEvent._id);
@@ -577,13 +786,36 @@ class TimerService {
           currentStage: nextStage,
           status: match.status,
           remainingTime: nextStageDuration,
-          stageDuration: nextStageDuration
+          stageDuration: nextStageDuration,
+          phaseEndsAt,
+          serverTime: Date.now()
+        });
+
+        socketEmitter.broadcastMatchPhaseChanged(matchId, {
+          matchId,
+          phase: nextStage,
+          status: match.status,
+          remainingTime: nextStageDuration,
+          stageDuration: nextStageDuration,
+          phaseEndsAt,
+          serverTime: Date.now()
+        });
+
+        socketEmitter.broadcastTimerEvent(matchId, 'timer:sync', {
+          matchId,
+          currentStage: nextStage,
+          remainingTime: nextStageDuration,
+          stageDuration: nextStageDuration,
+          phaseEndsAt,
+          serverTime: Date.now(),
+          isRunning: true,
+          isPaused: false
         });
       }
 
       return match;
     } finally {
-      activeTickerLocks.delete(matchId.toString());
+      activeTickerLocks.delete(lockKey);
     }
   }
 
@@ -598,9 +830,12 @@ class TimerService {
 
     match.isFinalized = true;
     match.status = MATCH_STATUS.COMPLETED;
+    match.timer.isRunning = false;
+    match.timer.isPaused = false;
+    match.timer.timerStatus = 'COMPLETED';
+    match.timer.phaseEndsAt = null;
     await match.save();
 
-    // Increment matches played for all players in both teams
     const teamAPlayers = await Player.find({ team: match.teamA });
     const teamBPlayers = await Player.find({ team: match.teamB });
 
@@ -629,7 +864,7 @@ class TimerService {
 
   /**
    * Server restart recovery: scans all active matches on boot, calculates elapsed time,
-   * cascades expired stages, and restores ticker state.
+   * cascades expired stages, and restores ticker state without resetting timers.
    */
   static async recoverActiveTimers() {
     try {
@@ -642,16 +877,15 @@ class TimerService {
         if (!match.timer || !match.timer.isRunning) continue;
 
         if (match.timer.isPaused) {
-          // Paused matches preserve their exact remaining time
           logger.info(`Match #${match.matchNumber} is paused at stage ${match.timer.currentStage} with ${match.timer.remainingTime}s remaining`);
           continue;
         }
 
-        // Active running match: check if stage has expired while server was offline
+        // Active running match: check if phaseEndsAt has expired while server was offline
         let remaining = TimerService.calculateRemainingTime(match);
         let currentMatch = match;
 
-        // Cascade through any expired stages
+        // Cascade through any expired stages exactly once
         while (remaining <= 0 && currentMatch.timer.isRunning && currentMatch.status !== MATCH_STATUS.COMPLETED) {
           logger.info(`Match #${currentMatch.matchNumber}: stage ${currentMatch.timer.currentStage} expired during server downtime. Advancing stage...`);
           currentMatch = await TimerService.advanceStage(currentMatch._id);
@@ -671,7 +905,7 @@ class TimerService {
   }
 
   /**
-   * Background ticker that runs every interval (1 sec) to broadcast ticks and advance stages
+   * Background ticker that checks for phase expiration and broadcasts live ticks.
    */
   static startTicker(intervalMs = 1000) {
     if (tickerInterval) {
@@ -693,15 +927,14 @@ class TimerService {
             // Stage time finished, automatically move to next stage!
             await TimerService.advanceStage(match._id);
           } else {
-            // Persist remaining time to database so all endpoints report exact authoritative second
-            await Match.updateOne({ _id: match._id }, { $set: { 'timer.remainingTime': remaining } });
-
-            // Broadcast live tick to socket room
+            // Broadcast live tick to socket room (clients compute smooth display from phaseEndsAt)
             socketEmitter.broadcastTimerUpdate(match._id, {
               matchId: match._id,
               currentStage: match.timer.currentStage,
               remainingTime: remaining,
               stageDuration: match.timer.stageDuration,
+              phaseEndsAt: match.timer.phaseEndsAt,
+              serverTime: Date.now(),
               isRunning: true,
               isPaused: false,
               teamAScore: match.teamAScore,

@@ -145,16 +145,34 @@ const socketEmitter = {
   // Broadcast match stage change and specific stage events
   broadcastStageChange: (matchId, data) => {
     if (io) {
-      io.to(`match:${matchId}`).emit('stage:change', data);
+      const payload = {
+        ...data,
+        phase: data.phase || data.currentStage,
+        currentStage: data.currentStage || data.phase
+      };
+      io.to(`match:${matchId}`).emit('stage:change', payload);
+      io.to(`match:${matchId}`).emit('match:phase_changed', payload);
 
-      if (data.currentStage === 'Transition Gap') {
-        io.to(`match:${matchId}`).emit('stage:first_half_completed', data);
-        io.to(`match:${matchId}`).emit('stage:transition_started', data);
-      } else if (data.currentStage === 'Half-Time') {
-        io.to(`match:${matchId}`).emit('stage:half_time_started', data);
-      } else if (data.currentStage === 'Second Half') {
-        io.to(`match:${matchId}`).emit('stage:second_half_started', data);
+      if (payload.currentStage === 'Transition Gap') {
+        io.to(`match:${matchId}`).emit('stage:first_half_completed', payload);
+        io.to(`match:${matchId}`).emit('stage:transition_started', payload);
+      } else if (payload.currentStage === 'Half-Time') {
+        io.to(`match:${matchId}`).emit('stage:half_time_started', payload);
+      } else if (payload.currentStage === 'Second Half') {
+        io.to(`match:${matchId}`).emit('stage:second_half_started', payload);
       }
+    }
+  },
+
+  broadcastMatchPhaseChanged: (matchId, data) => {
+    if (io) {
+      const payload = {
+        ...data,
+        phase: data.phase || data.currentStage,
+        currentStage: data.currentStage || data.phase
+      };
+      io.to(`match:${matchId}`).emit('match:phase_changed', payload);
+      io.to(`match:${matchId}`).emit('stage:change', payload);
     }
   },
 

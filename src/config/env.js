@@ -9,7 +9,7 @@ const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   corsOrigins: process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
-    : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:4173'],
+    : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:4173', 'https://football.mediaiofficial.in'],
   rateLimitWindowMs: 900000, // 15 minutes (hardcoded)
   rateLimitMax: 1000, // 1000 requests per 15 minutes (hardcoded)
   timerTickIntervalMs: 1000 // 1 second ticker interval (hardcoded)
