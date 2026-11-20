@@ -96,22 +96,138 @@ class TeamService {
       filter.name = { $regex: query.search, $options: 'i' };
     }
 
-    return Team.find(filter)
+    const teams = await Team.find(filter)
       .populate('captain', 'name jerseyNumber position')
       .populate('players')
-      .sort({ totalPoints: -1, goalDifference: -1, goalsScored: -1 });
+      .sort({ totalPoints: -1, goalDifference: -1, goalsScored: -1 })
+      .lean();
+
+    const teamIds = teams.map((t) => t._id);
+
+    // Fetch all active players for these teams to guarantee 100% sync
+    const allPlayers = await Player.find({ team: { $in: teamIds } })
+      .sort({ jerseyNumber: 1 })
+      .lean();
+
+    const playersByTeam = {};
+    allPlayers.forEach((p) => {
+      const tid = p.team ? p.team.toString() : '';
+      if (!playersByTeam[tid]) playersByTeam[tid] = [];
+      playersByTeam[tid].push(p);
+    });
+
+    // Also sync Team.players array in database if any player is not yet in team.players
+    for (const team of teams) {
+      const tid = team._id.toString();
+      const currentPlayers = playersByTeam[tid] || [];
+      const currentIds = currentPlayers.map((p) => p._id.toString());
+      const existingIds = (team.players || []).map((p) => (p._id ? p._id.toString() : p.toString()));
+      const needsSync = currentIds.some((id) => !existingIds.includes(id));
+      if (needsSync) {
+        Team.findByIdAndUpdate(team._id, { $addToSet: { players: { $each: currentPlayers.map((p) => p._id) } } }).catch(() => {});
+      }
+    }
+
+    // Fetch completed matches for real form calculation
+    const completedMatches = await Match.find({
+      $or: [{ teamA: { $in: teamIds } }, { teamB: { $in: teamIds } }],
+      status: 'Completed',
+      isFinalized: true
+    })
+      .sort({ matchDate: -1, updatedAt: -1, createdAt: -1 })
+      .lean();
+
+    return teams.map((team, idx) => {
+      const tid = team._id.toString();
+      const squadPlayers = playersByTeam[tid] && playersByTeam[tid].length > 0
+        ? playersByTeam[tid]
+        : (Array.isArray(team.players) ? team.players : []);
+
+      const teamMatches = completedMatches
+        .filter((m) => (m.teamA && m.teamA.toString() === tid) || (m.teamB && m.teamB.toString() === tid))
+        .slice(0, 5);
+
+      const form = teamMatches.map((m) => {
+        const isTeamA = m.teamA && m.teamA.toString() === tid;
+        const myScore = isTeamA ? (m.score?.teamA ?? m.teamAScore ?? 0) : (m.score?.teamB ?? m.teamBScore ?? 0);
+        const oppScore = isTeamA ? (m.score?.teamB ?? m.teamBScore ?? 0) : (m.score?.teamA ?? m.teamAScore ?? 0);
+        if (m.winner) {
+          return m.winner.toString() === tid ? 'W' : 'L';
+        }
+        if (myScore > oppScore) return 'W';
+        if (myScore < oppScore) return 'L';
+        return 'D';
+      });
+
+      const position = idx + 1;
+      const seed = `#${position} SEED`;
+
+      return {
+        ...team,
+        players: squadPlayers,
+        form,
+        position,
+        seed,
+        stats: {
+          matchesPlayed: team.matchesPlayed || 0,
+          matchesWon: team.matchesWon || 0,
+          matchesLost: team.matchesLost || 0,
+          goalsScored: team.goalsScored || 0,
+          goalsConceded: team.goalsConceded || 0,
+          goalDifference: team.goalDifference || 0,
+          totalPoints: team.totalPoints || 0
+        }
+      };
+    });
   }
 
   static async getTeamById(id) {
     const team = await Team.findById(id)
       .populate('captain', 'name jerseyNumber position')
-      .populate('players');
+      .populate('players')
+      .lean();
 
     if (!team) {
       throw new Error('Team not found');
     }
 
-    return team;
+    const squadPlayers = await Player.find({ team: id }).sort({ jerseyNumber: 1 }).lean();
+    const completedMatches = await Match.find({
+      $or: [{ teamA: id }, { teamB: id }],
+      status: 'Completed',
+      isFinalized: true
+    })
+      .sort({ matchDate: -1, updatedAt: -1, createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    const tid = team._id.toString();
+    const form = completedMatches.map((m) => {
+      const isTeamA = m.teamA && m.teamA.toString() === tid;
+      const myScore = isTeamA ? (m.score?.teamA ?? m.teamAScore ?? 0) : (m.score?.teamB ?? m.teamBScore ?? 0);
+      const oppScore = isTeamA ? (m.score?.teamB ?? m.teamBScore ?? 0) : (m.score?.teamA ?? m.teamAScore ?? 0);
+      if (m.winner) {
+        return m.winner.toString() === tid ? 'W' : 'L';
+      }
+      if (myScore > oppScore) return 'W';
+      if (myScore < oppScore) return 'L';
+      return 'D';
+    });
+
+    return {
+      ...team,
+      players: squadPlayers.length > 0 ? squadPlayers : (team.players || []),
+      form,
+      stats: {
+        matchesPlayed: team.matchesPlayed || 0,
+        matchesWon: team.matchesWon || 0,
+        matchesLost: team.matchesLost || 0,
+        goalsScored: team.goalsScored || 0,
+        goalsConceded: team.goalsConceded || 0,
+        goalDifference: team.goalDifference || 0,
+        totalPoints: team.totalPoints || 0
+      }
+    };
   }
 
   static async getTeamPlayers(teamId) {

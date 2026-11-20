@@ -108,7 +108,36 @@ const endMatch = asyncHandler(async (req, res) => {
     match.winner = match.teamB;
     match.matchResult = 'Regulation Win';
   } else {
-    match.matchResult = 'Draw';
+    // Scores are tied! Check shootout or sudden-death toss results
+    const penA = match.shootout?.teamAPenaltyScore ?? 0;
+    const penB = match.shootout?.teamBPenaltyScore ?? 0;
+    if (match.shootout?.shootoutWinner) {
+      match.winner = match.shootout.shootoutWinner;
+      const isTeamAWinner = match.winner.toString() === match.teamA._id.toString();
+      const winnerName = isTeamAWinner ? (match.teamA.name || 'Team A') : (match.teamB.name || 'Team B');
+      match.matchResult = `${winnerName} won (${penA} - ${penB}) on penalties`;
+    } else if (penA > penB) {
+      match.winner = match.teamA;
+      match.shootout = match.shootout || {};
+      match.shootout.shootoutWinner = match.teamA;
+      match.shootout.isCompleted = true;
+      const winnerName = match.teamA.name || 'Team A';
+      match.matchResult = `${winnerName} won (${penA} - ${penB}) on penalties`;
+    } else if (penB > penA) {
+      match.winner = match.teamB;
+      match.shootout = match.shootout || {};
+      match.shootout.shootoutWinner = match.teamB;
+      match.shootout.isCompleted = true;
+      const winnerName = match.teamB.name || 'Team B';
+      match.matchResult = `${winnerName} won (${penA} - ${penB}) on penalties`;
+    } else if (match.toss?.winner) {
+      match.winner = match.toss.winner;
+      const isTeamAWinner = match.winner.toString() === match.teamA._id.toString();
+      const winnerName = isTeamAWinner ? (match.teamA.name || 'Team A') : (match.teamB.name || 'Team B');
+      match.matchResult = `${winnerName} Sudden Death Victory`;
+    } else {
+      match.matchResult = 'Full Time Draw';
+    }
   }
 
   await match.save();

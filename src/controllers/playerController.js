@@ -1,19 +1,23 @@
 const PlayerService = require('../services/playerService');
 const ApiResponse = require('../utils/apiResponse');
 const asyncHandler = require('../utils/asyncHandler');
+const { socketEmitter } = require('../sockets/socketManager');
 
 const createPlayer = asyncHandler(async (req, res) => {
   const player = await PlayerService.createPlayer(req.body);
+  socketEmitter.broadcastPlayerCreated(player);
   return ApiResponse.created(res, 'Player created successfully', player);
 });
 
 const updatePlayer = asyncHandler(async (req, res) => {
   const player = await PlayerService.updatePlayer(req.params.id, req.body);
+  socketEmitter.broadcastPlayerUpdate(req.params.id, player);
   return ApiResponse.success(res, 'Player updated successfully', player);
 });
 
 const deletePlayer = asyncHandler(async (req, res) => {
   const result = await PlayerService.deletePlayer(req.params.id);
+  socketEmitter.broadcastPlayerDeleted(req.params.id);
   return ApiResponse.success(res, result.message);
 });
 

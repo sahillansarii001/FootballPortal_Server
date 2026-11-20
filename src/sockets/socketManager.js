@@ -270,6 +270,47 @@ const socketEmitter = {
     if (io) {
       io.to(`tournament:${tournamentId}`).emit('standings:update', data);
       io.emit('leaderboard:update', { tournamentId, standings: data });
+      io.emit('teams:update', { tournamentId, standings: data });
+    }
+  },
+
+  // Broadcast team changes
+  broadcastTeamCreated: (data) => {
+    if (io) {
+      io.emit('team:created', data);
+      io.emit('teams:update', data);
+    }
+  },
+  broadcastTeamUpdate: (teamId, data) => {
+    if (io) {
+      io.emit('team:updated', { teamId, team: data });
+      io.emit('teams:update', { teamId, team: data });
+    }
+  },
+  broadcastTeamDeleted: (teamId) => {
+    if (io) {
+      io.emit('team:deleted', { teamId });
+      io.emit('teams:update', { teamId });
+    }
+  },
+
+  // Broadcast player changes
+  broadcastPlayerCreated: (data) => {
+    if (io) {
+      io.emit('player:created', data);
+      io.emit('teams:update', data);
+    }
+  },
+  broadcastPlayerUpdate: (playerId, data) => {
+    if (io) {
+      io.emit('player:updated', { playerId, player: data });
+      io.emit('teams:update', { playerId, player: data });
+    }
+  },
+  broadcastPlayerDeleted: (playerId, teamId) => {
+    if (io) {
+      io.emit('player:deleted', { playerId, teamId });
+      io.emit('teams:update', { playerId, teamId });
     }
   }
 };

@@ -1,19 +1,23 @@
 const TeamService = require('../services/teamService');
 const ApiResponse = require('../utils/apiResponse');
 const asyncHandler = require('../utils/asyncHandler');
+const { socketEmitter } = require('../sockets/socketManager');
 
 const createTeam = asyncHandler(async (req, res) => {
   const team = await TeamService.createTeam(req.body);
+  socketEmitter.broadcastTeamCreated(team);
   return ApiResponse.created(res, 'Team created successfully', team);
 });
 
 const updateTeam = asyncHandler(async (req, res) => {
   const team = await TeamService.updateTeam(req.params.id, req.body);
+  socketEmitter.broadcastTeamUpdate(req.params.id, team);
   return ApiResponse.success(res, 'Team updated successfully', team);
 });
 
 const deleteTeam = asyncHandler(async (req, res) => {
   const result = await TeamService.deleteTeam(req.params.id);
+  socketEmitter.broadcastTeamDeleted(req.params.id);
   return ApiResponse.success(res, result.message);
 });
 
