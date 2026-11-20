@@ -209,14 +209,6 @@ const setClockTime = asyncHandler(async (req, res) => {
     }
   });
 });
-    serverTime: Date.now(),
-    timer: {
-      ...match.timer.toObject(),
-      remainingTime,
-      remainingMs: remainingTime * 1000
-    }
-  });
-});
 
 module.exports = {
   getTimerStatus,
