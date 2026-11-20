@@ -247,6 +247,9 @@ class MatchService {
       matchObj.timer.serverTime = Date.now();
       matchObj.timer.timerStatus = matchObj.timer.timerStatus || (matchObj.timer.isRunning ? (matchObj.timer.isPaused ? 'PAUSED' : 'RUNNING') : 'NOT_STARTED');
     }
+    if (!matchObj.goals && matchObj.events && Array.isArray(matchObj.events)) {
+      matchObj.goals = matchObj.events.filter((e) => (e.type === EVENT_TYPES.GOAL_SCORED || e.type === 'GOAL') && !e.isUndone);
+    }
     return matchObj;
   }
 
@@ -261,6 +264,14 @@ class MatchService {
       .populate('teamB', 'name logo coach')
       .populate('tournament', 'name')
       .populate('winner', 'name logo')
+      .populate({
+        path: 'events',
+        match: { isUndone: false, type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] } },
+        populate: [
+          { path: 'player', select: 'name jerseyNumber position club' },
+          { path: 'team', select: 'name logo' }
+        ]
+      })
       .sort({ matchDate: 1, matchTime: 1 });
 
     return matches.map((m) => MatchService.attachLiveTimer(m));
@@ -287,6 +298,14 @@ class MatchService {
       .populate('teamA', 'name logo coach')
       .populate('teamB', 'name logo coach')
       .populate('tournament', 'name')
+      .populate({
+        path: 'events',
+        match: { isUndone: false, type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] } },
+        populate: [
+          { path: 'player', select: 'name jerseyNumber position club' },
+          { path: 'team', select: 'name logo' }
+        ]
+      })
       .sort({ matchDate: 1, matchTime: 1 });
 
     return matches.map((m) => MatchService.attachLiveTimer(m));
@@ -296,12 +315,22 @@ class MatchService {
     const filter = { status: MATCH_STATUS.COMPLETED };
     if (tournamentId) filter.tournament = tournamentId;
 
-    return Match.find(filter)
+    const matches = await Match.find(filter)
       .populate('teamA', 'name logo')
       .populate('teamB', 'name logo')
       .populate('winner', 'name logo')
       .populate('tournament', 'name')
+      .populate({
+        path: 'events',
+        match: { isUndone: false, type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] } },
+        populate: [
+          { path: 'player', select: 'name jerseyNumber position club' },
+          { path: 'team', select: 'name logo' }
+        ]
+      })
       .sort({ matchDate: -1 });
+
+    return matches.map((m) => MatchService.attachLiveTimer(m));
   }
 
   static async getMatchById(id) {
@@ -324,7 +353,18 @@ class MatchService {
       return null;
     }
 
-    return MatchService.attachLiveTimer(match);
+    const matchObj = MatchService.attachLiveTimer(match);
+    const goals = await MatchEvent.find({
+      match: id,
+      type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] },
+      isUndone: false
+    })
+      .populate('team', 'name logo')
+      .populate('player', 'name jerseyNumber position club')
+      .sort({ timestamp: 1, createdAt: 1 });
+
+    matchObj.goals = goals;
+    return matchObj;
   }
 
   static async getMatchesByTeam(teamId) {
