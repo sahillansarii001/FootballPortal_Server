@@ -3,6 +3,8 @@ const Team = require('../models/Team');
 const Tournament = require('../models/Tournament');
 const MatchEvent = require('../models/MatchEvent');
 const PenaltyShootout = require('../models/PenaltyShootout');
+const Player = require('../models/Player');
+const TossRecord = require('../models/TossRecord');
 const { MATCH_STATUS, STAGE_DURATIONS, TIMER_STAGES, EVENT_TYPES } = require('../utils/constants');
 
 class MatchService {
@@ -225,13 +227,68 @@ class MatchService {
       return null;
     }
 
-    if (match.status === MATCH_STATUS.COMPLETED) {
-      throw new Error('Cannot delete a completed match with recorded statistics');
+    // Revert player goal statistics recorded in this match
+    try {
+      const goalEvents = await MatchEvent.find({
+        match: id,
+        type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] },
+        isUndone: false
+      });
+
+      for (const ev of goalEvents) {
+        if (ev.player) {
+          const p = await Player.findById(ev.player);
+          if (p) {
+            p.goals = Math.max(0, (p.goals || 0) - 1);
+            if (ev.type === 'PENALTY' || ev.detail?.goalType === 'PENALTY') {
+              p.penaltiesScored = Math.max(0, (p.penaltiesScored || 0) - 1);
+            }
+            await p.save();
+          }
+        }
+        if (ev.secondaryPlayer) {
+          const assistPlayer = await Player.findById(ev.secondaryPlayer);
+          if (assistPlayer) {
+            assistPlayer.assists = Math.max(0, (assistPlayer.assists || 0) - 1);
+            await assistPlayer.save();
+          }
+        }
+      }
+
+      // Revert player penalty shootout stats
+      const penalties = await PenaltyShootout.find({ match: id });
+      for (const pen of penalties) {
+        if (pen.outcome === 'Goal' && pen.player) {
+          const taker = await Player.findById(pen.player);
+          if (taker) {
+            taker.penaltiesScored = Math.max(0, (taker.penaltiesScored || 0) - 1);
+            await taker.save();
+          }
+        } else if (pen.outcome === 'Saved' && pen.goalkeeper) {
+          const gk = await Player.findById(pen.goalkeeper);
+          if (gk) {
+            gk.penaltiesSaved = Math.max(0, (gk.penaltiesSaved || 0) - 1);
+            await gk.save();
+          }
+        }
+      }
+    } catch (statErr) {
+      console.warn('Non-fatal error reverting match player statistics on delete:', statErr.message);
     }
 
+    // Clean up all related documents
     await MatchEvent.deleteMany({ match: id });
     await PenaltyShootout.deleteMany({ match: id });
+    await TossRecord.deleteMany({ match: id });
+
+    const tournamentId = match.tournament;
     await match.deleteOne();
+
+    // Recalculate standings so points, wins, and goals are updated
+    if (tournamentId) {
+      const StandingsService = require('./standingsService');
+      await StandingsService.recalculateTournamentStandings(tournamentId);
+    }
 
     return { message: 'Match deleted successfully' };
   }

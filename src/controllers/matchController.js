@@ -41,6 +41,9 @@ const updateMatch = asyncHandler(async (req, res) => {
 
 const deleteMatch = asyncHandler(async (req, res) => {
   const result = await MatchService.deleteMatch(req.params.id);
+  if (!result) {
+    return ApiResponse.notFound(res, 'Match not found');
+  }
   return ApiResponse.success(res, result.message);
 });
 
