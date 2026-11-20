@@ -346,7 +346,14 @@ class MatchService {
   }
 
   static async getMatchById(id) {
-    const match = await Match.findById(id)
+    let query = null;
+    if (id && !isNaN(Number(id)) && !/^[0-9a-fA-F]{24}$/.test(String(id))) {
+      query = { matchNumber: Number(id) };
+    } else {
+      query = { _id: id };
+    }
+
+    const match = await Match.findOne(query)
       .populate('teamA', 'name logo coach captain players')
       .populate('teamB', 'name logo coach captain players')
       .populate('tournament', 'name rules')
@@ -368,7 +375,7 @@ class MatchService {
 
     const matchObj = MatchService.attachLiveTimer(match);
     const goals = await MatchEvent.find({
-      match: id,
+      match: match._id,
       type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] },
       isUndone: false
     })
@@ -376,7 +383,7 @@ class MatchService {
       .populate('player', 'name jerseyNumber position club')
       .sort({ timestamp: 1, createdAt: 1 });
 
-    const penalties = await PenaltyShootout.find({ match: id })
+    const penalties = await PenaltyShootout.find({ match: match._id })
       .populate('team', 'name logo')
       .populate('player', 'name jerseyNumber position club')
       .populate('goalkeeper', 'name jerseyNumber position club')
@@ -406,7 +413,14 @@ class MatchService {
    */
   static async getLiveMatchState(id) {
     const TimerService = require('./timerService');
-    const match = await Match.findById(id)
+    let query = null;
+    if (id && !isNaN(Number(id)) && !/^[0-9a-fA-F]{24}$/.test(String(id))) {
+      query = { matchNumber: Number(id) };
+    } else {
+      query = { _id: id };
+    }
+
+    const match = await Match.findOne(query)
       .populate('teamA', 'name logo coach')
       .populate('teamB', 'name logo coach')
       .populate('tournament', 'name rules')
@@ -419,7 +433,7 @@ class MatchService {
     const remainingTime = TimerService.calculateRemainingTime(match);
 
     let goals = await MatchEvent.find({
-      match: id,
+      match: match._id,
       type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] },
       isUndone: false
     })
@@ -430,7 +444,7 @@ class MatchService {
     // Defensive safeguard: If match was restarted at 0-0 in First Half or Upcoming, purge prior ghost goals
     if (match.teamAScore === 0 && match.teamBScore === 0 && (match.timer?.currentStage === TIMER_STAGES.FIRST_HALF || match.status === MATCH_STATUS.UPCOMING) && goals.length > 0) {
       await MatchEvent.deleteMany({
-        match: id,
+        match: match._id,
         type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] }
       });
       match.events = [];
@@ -438,13 +452,13 @@ class MatchService {
       goals = [];
     }
 
-    const penalties = await PenaltyShootout.find({ match: id })
+    const penalties = await PenaltyShootout.find({ match: match._id })
       .populate('team', 'name logo')
       .populate('player', 'name jerseyNumber position')
       .populate('goalkeeper', 'name jerseyNumber position')
       .sort({ penaltyNumber: 1 });
 
-    const events = await MatchEvent.find({ match: id })
+    const events = await MatchEvent.find({ match: match._id })
       .populate('team', 'name logo')
       .populate('player', 'name jerseyNumber position')
       .populate('secondaryPlayer', 'name jerseyNumber position')
@@ -493,11 +507,22 @@ class MatchService {
     };
   }
 
+  static async resolveMatchId(id) {
+    if (!id) return null;
+    if (!isNaN(Number(id)) && !/^[0-9a-fA-F]{24}$/.test(String(id))) {
+      const m = await Match.findOne({ matchNumber: Number(id) });
+      return m ? m._id : null;
+    }
+    return id;
+  }
+
   /**
    * Complete chronologically arranged events
    */
   static async getMatchEvents(id) {
-    return MatchEvent.find({ match: id })
+    const matchId = await MatchService.resolveMatchId(id);
+    if (!matchId) return [];
+    return MatchEvent.find({ match: matchId })
       .populate('team', 'name logo')
       .populate('player', 'name jerseyNumber position')
       .populate('secondaryPlayer', 'name jerseyNumber position')
@@ -509,7 +534,9 @@ class MatchService {
    * Chronological human-readable match timeline
    */
   static async getMatchTimeline(id) {
-    const events = await MatchEvent.find({ match: id })
+    const matchId = await MatchService.resolveMatchId(id);
+    if (!matchId) return [];
+    const events = await MatchEvent.find({ match: matchId })
       .populate('team', 'name logo')
       .populate('player', 'name jerseyNumber position')
       .populate('secondaryPlayer', 'name jerseyNumber position')

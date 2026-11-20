@@ -68,7 +68,7 @@ class PenaltyService {
     const rawOutcome = (penaltyData.outcome || 'Goal').toString();
     const outcome = rawOutcome.charAt(0).toUpperCase() + rawOutcome.slice(1).toLowerCase();
 
-    return await withTransaction(async (session) => {
+    const result = await withTransaction(async (session) => {
       const match = await Match.findById(matchId).session(session);
       if (!match) {
         throw new Error('Match not found');
@@ -144,7 +144,7 @@ class PenaltyService {
       if (outcome === PENALTY_OUTCOMES.GOAL) {
         taker.penaltiesScored += 1;
         await taker.save({ session });
-      } else if (outcome === PENALTY_OUTCOMES.SAVED) {
+      } else if (outcome === PENALTY_OUTCOMES.SAVED && goalkeeper) {
         goalkeeper.penaltiesSaved += 1;
         await goalkeeper.save({ session });
       }
@@ -184,15 +184,14 @@ class PenaltyService {
         match.shootout.shootoutWinner = winningTeamId;
         match.winner = winningTeamId;
         match.status = MATCH_STATUS.COMPLETED;
+        match.isFinalized = true;
+        match.timer.isRunning = false;
+        match.timer.isPaused = false;
+        match.timer.timerStatus = 'COMPLETED';
+        match.timer.phaseEndsAt = null;
         match.matchResult = `Penalty Shootout Win (${match.shootout.teamAPenaltyScore} - ${match.shootout.teamBPenaltyScore})`;
 
         await match.save({ session });
-
-        // Finalize match, tournament standings, and win/loss records
-        await TimerService.finalizeMatch(match._id);
-        if (match.tournament) {
-          await StandingsService.recalculateTournamentStandings(match.tournament);
-        }
 
         socketEmitter.broadcastShootoutCompleted(matchId, {
           matchId,
@@ -254,7 +253,9 @@ class PenaltyService {
       match.events.push(event._id);
       await match.save({ session });
 
-      const populatedPenalty = await PenaltyShootout.findById(penalty._id)
+      const query = PenaltyShootout.findById(penalty._id);
+      if (session) query.session(session);
+      const populatedPenalty = await query
         .populate('team', 'name logo')
         .populate('player', 'name jerseyNumber position')
         .populate('goalkeeper', 'name jerseyNumber position');
@@ -272,9 +273,21 @@ class PenaltyService {
       return {
         penalty: populatedPenalty,
         shootoutState: match.shootout,
-        evaluation
+        evaluation,
+        tournamentId: match.tournament,
+        isDecided: evaluation.isDecided
       };
     });
+
+    if (result.isDecided && result.tournamentId) {
+      await StandingsService.recalculateTournamentStandings(result.tournamentId);
+    }
+
+    return {
+      penalty: result.penalty,
+      shootoutState: result.shootoutState,
+      evaluation: result.evaluation
+    };
   }
 
   /**
@@ -386,7 +399,7 @@ class PenaltyService {
    * Record the single decisive sudden-death penalty kick
    */
   static async recordDecisiveKick(matchId, kickData, userId = null) {
-    return await withTransaction(async (session) => {
+    const result = await withTransaction(async (session) => {
       const match = await Match.findById(matchId).session(session);
       if (!match) {
         throw new Error('Match not found');
@@ -469,6 +482,10 @@ class PenaltyService {
       match.winner = winningTeamId;
       match.status = MATCH_STATUS.COMPLETED;
       match.isFinalized = true;
+      match.timer.isRunning = false;
+      match.timer.isPaused = false;
+      match.timer.timerStatus = 'COMPLETED';
+      match.timer.phaseEndsAt = null;
       match.matchResult = `Sudden Death Decided (${outcome === 'Goal' ? 'Sudden Death Goal' : 'Decisive Penalty Save'})`;
 
       await match.save({ session });
@@ -484,12 +501,6 @@ class PenaltyService {
         },
         { session }
       );
-
-      // Finalize standings
-      await TimerService.finalizeMatch(match._id);
-      if (match.tournament) {
-        await StandingsService.recalculateTournamentStandings(match.tournament);
-      }
 
       const suddenDeathEvent = await MatchEvent.create(
         [
@@ -538,11 +549,23 @@ class PenaltyService {
 
       return {
         match,
+        tournamentId: match.tournament,
         penalty: penalties[0],
         winner: winningTeamId,
         outcome
       };
     });
+
+    if (result.tournamentId) {
+      await StandingsService.recalculateTournamentStandings(result.tournamentId);
+    }
+
+    return {
+      match: result.match,
+      penalty: result.penalty,
+      winner: result.winner,
+      outcome: result.outcome
+    };
   }
 }
 

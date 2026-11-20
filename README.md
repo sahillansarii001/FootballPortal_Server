@@ -115,7 +115,7 @@ Server/
    NODE_ENV=development
    PORT=5000
    MONGODB_URI=mongodb+srv://<USER>:<PASS>@<CLUSTER>.mongodb.net/football_portal?retryWrites=true&w=majority
-   JWT_SECRET=super_secret_football_jwt_key_2026_production_grade_token
+   JWT_SECRET=your_production_grade_jwt_secret_here
    JWT_EXPIRES_IN=7d
    CORS_ORIGIN=http://localhost:3000,http://localhost:5173,http://localhost:4173
    ```

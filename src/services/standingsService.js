@@ -127,6 +127,11 @@ class StandingsService {
       const standing = standingsArray[i];
       standing.position = i + 1;
       standing.lastUpdated = new Date();
+      standing.matchesWon = standing.won;
+      standing.matchesLost = standing.lost;
+      standing.goalsScored = standing.goalsFor;
+      standing.goalsConceded = standing.goalsAgainst;
+      standing.totalPoints = standing.points;
 
       const upserted = await TournamentStanding.findOneAndUpdate(
         { tournament: tournamentId, team: standing.team },
@@ -157,11 +162,34 @@ class StandingsService {
   }
 
   static async getPointTable(tournamentId) {
-    const standings = await TournamentStanding.find({ tournament: tournamentId })
+    let resolvedTournamentId = tournamentId;
+    if (!resolvedTournamentId || !/^[0-9a-fA-F]{24}$/.test(String(resolvedTournamentId))) {
+      const active = (await Tournament.findOne({ status: 'Ongoing' })) || (await Tournament.findOne().sort({ createdAt: -1 }));
+      if (!active) return [];
+      resolvedTournamentId = active._id;
+    }
+
+    let standings = await TournamentStanding.find({ tournament: resolvedTournamentId })
       .populate('team', 'name logo coach')
       .sort({ position: 1 });
 
-    return standings;
+    if (!standings || standings.length === 0) {
+      try {
+        standings = await this.recalculateTournamentStandings(resolvedTournamentId);
+      } catch (err) {
+        // Fallback gracefully
+      }
+    }
+
+    return standings.map((s) => {
+      const obj = typeof s.toObject === 'function' ? s.toObject() : { ...s };
+      obj.matchesWon = obj.matchesWon !== undefined ? obj.matchesWon : obj.won;
+      obj.matchesLost = obj.matchesLost !== undefined ? obj.matchesLost : obj.lost;
+      obj.goalsScored = obj.goalsScored !== undefined ? obj.goalsScored : obj.goalsFor;
+      obj.goalsConceded = obj.goalsConceded !== undefined ? obj.goalsConceded : obj.goalsAgainst;
+      obj.totalPoints = obj.totalPoints !== undefined ? obj.totalPoints : obj.points;
+      return obj;
+    });
   }
 
   static async getTeamRanking(tournamentId, teamId) {

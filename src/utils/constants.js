@@ -104,7 +104,7 @@ const EVENT_TYPES = {
 };
 
 const POINTS = {
-  WIN: 1,
+  WIN: 3,
   LOSS: 0
 };
 

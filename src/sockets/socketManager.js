@@ -265,6 +265,15 @@ const socketEmitter = {
     }
   },
 
+  // Broadcast timeline events
+  broadcastTimelineEvent: (matchId, data) => {
+    if (io) {
+      io.to(`match:${matchId}`).emit('timeline:update', data);
+      io.to(`match:${matchId}`).emit('match:timeline', data);
+      io.emit('match:timeline', data);
+    }
+  },
+
   // Broadcast tournament standings update
   broadcastStandingsUpdate: (tournamentId, data) => {
     if (io) {

@@ -112,7 +112,9 @@ class GoalService {
       match.events.push(matchEvent._id);
       await match.save({ session });
 
-      const populatedEvent = await MatchEvent.findById(matchEvent._id)
+      const query = MatchEvent.findById(matchEvent._id);
+      if (session) query.session(session);
+      const populatedEvent = await query
         .populate('team', 'name logo')
         .populate('player', 'name jerseyNumber position');
 
@@ -365,7 +367,9 @@ class GoalService {
         teamBScore: match.teamBScore
       });
 
-      return MatchEvent.findById(goalEvent._id)
+      const editQuery = MatchEvent.findById(goalEvent._id);
+      if (session) editQuery.session(session);
+      return await editQuery
         .populate('team', 'name logo')
         .populate('player', 'name jerseyNumber position');
     });

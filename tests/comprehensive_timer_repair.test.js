@@ -81,10 +81,12 @@ afterAll(async () => {
   }
 });
 
+let matchCounter = 5000;
 beforeEach(async () => {
+  matchCounter++;
   const match = await Match.create({
     tournament: tournamentId,
-    matchNumber: Math.floor(Math.random() * 10000),
+    matchNumber: matchCounter,
     teamA: teamAId,
     teamB: teamBId,
     matchDate: new Date(),

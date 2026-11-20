@@ -4,7 +4,8 @@ const ApiResponse = require('../utils/apiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 
 const getTournamentStandings = asyncHandler(async (req, res) => {
-  const standings = await StandingsService.getPointTable(req.params.tournamentId);
+  const tournamentId = req.params.tournamentId || req.query.tournamentId;
+  const standings = await StandingsService.getPointTable(tournamentId);
   return ApiResponse.success(res, 'Tournament standings fetched successfully', standings);
 });
 
