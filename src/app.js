@@ -42,10 +42,13 @@ if (process.env.NODE_ENV !== 'test') {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting for standard API endpoints
+// Hardcoded rate limiting for standard API endpoints (15 min window, 1000 max requests)
+const RATE_LIMIT_WINDOW_MS = 900000;
+const RATE_LIMIT_MAX = 1000;
+
 const limiter = rateLimit({
-  windowMs: 900000, // 15 minutes (hardcoded)
-  max: 1000, // 1000 requests per 15 minutes (hardcoded)
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

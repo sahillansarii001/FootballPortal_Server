@@ -118,9 +118,6 @@ Server/
    JWT_SECRET=super_secret_football_jwt_key_2026_production_grade_token
    JWT_EXPIRES_IN=7d
    CORS_ORIGIN=http://localhost:3000,http://localhost:5173,http://localhost:4173
-   RATE_LIMIT_WINDOW_MS=900000
-   RATE_LIMIT_MAX=1000
-   TIMER_TICK_INTERVAL_MS=1000
    ```
 
 3. Seed Initial Database Data:

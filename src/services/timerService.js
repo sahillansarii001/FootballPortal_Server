@@ -13,6 +13,9 @@ const {
 } = require('../utils/constants');
 const logger = require('../utils/logger');
 
+// Hardcoded core timer interval - 1-second ticks
+const TIMER_TICK_INTERVAL_MS = 1000;
+
 let tickerInterval = null;
 const activeTickerLocks = new Set();
 
@@ -907,7 +910,7 @@ class TimerService {
   /**
    * Background ticker that checks for phase expiration and broadcasts live ticks.
    */
-  static startTicker(intervalMs = 1000) {
+  static startTicker(intervalMs = TIMER_TICK_INTERVAL_MS) {
     if (tickerInterval) {
       clearInterval(tickerInterval);
     }
