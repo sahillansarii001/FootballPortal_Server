@@ -227,56 +227,9 @@ class MatchService {
       return null;
     }
 
-    // Revert player goal statistics recorded in this match
-    try {
-      const goalEvents = await MatchEvent.find({
-        match: id,
-        type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] },
-        isUndone: false
-      });
-
-      for (const ev of goalEvents) {
-        if (ev.player) {
-          const p = await Player.findById(ev.player);
-          if (p) {
-            p.goals = Math.max(0, (p.goals || 0) - 1);
-            if (ev.type === 'PENALTY' || ev.detail?.goalType === 'PENALTY') {
-              p.penaltiesScored = Math.max(0, (p.penaltiesScored || 0) - 1);
-            }
-            await p.save();
-          }
-        }
-        if (ev.secondaryPlayer) {
-          const assistPlayer = await Player.findById(ev.secondaryPlayer);
-          if (assistPlayer) {
-            assistPlayer.assists = Math.max(0, (assistPlayer.assists || 0) - 1);
-            await assistPlayer.save();
-          }
-        }
-      }
-
-      // Revert player penalty shootout stats
-      const penalties = await PenaltyShootout.find({ match: id });
-      for (const pen of penalties) {
-        if (pen.outcome === 'Goal' && pen.player) {
-          const taker = await Player.findById(pen.player);
-          if (taker) {
-            taker.penaltiesScored = Math.max(0, (taker.penaltiesScored || 0) - 1);
-            await taker.save();
-          }
-        } else if (pen.outcome === 'Saved' && pen.goalkeeper) {
-          const gk = await Player.findById(pen.goalkeeper);
-          if (gk) {
-            gk.penaltiesSaved = Math.max(0, (gk.penaltiesSaved || 0) - 1);
-            await gk.save();
-          }
-        }
-      }
-    } catch (statErr) {
-      console.warn('Non-fatal error reverting match player statistics on delete:', statErr.message);
-    }
-
-    // Clean up all related documents
+    // Clean up all fixture-specific event and shootout records
+    // Note: Cumulative player career goals and penalty records are preserved
+    // in the Top Scorers / Golden Boot registry and are not wiped out.
     await MatchEvent.deleteMany({ match: id });
     await PenaltyShootout.deleteMany({ match: id });
     await TossRecord.deleteMany({ match: id });

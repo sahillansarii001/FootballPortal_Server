@@ -8,16 +8,26 @@ const createPlayerSchema = z.object({
   jerseyNumber: z.number().int().min(1, 'Jersey number must be >= 1').max(99, 'Jersey number must be <= 99'),
   club: z.string().max(100).optional(),
   team: z.string().regex(objectIdRegex, 'Invalid Team ID'),
-  position: z.enum(Object.values(PLAYER_POSITIONS)).optional()
-});
+  position: z.enum(Object.values(PLAYER_POSITIONS)).optional(),
+  goals: z.number().int().min(0).optional(),
+  penaltiesScored: z.number().int().min(0).optional(),
+  penaltiesSaved: z.number().int().min(0).optional(),
+  matchesPlayed: z.number().int().min(0).optional()
+}).passthrough();
 
 const updatePlayerSchema = z.object({
   name: z.string().min(2).max(60).optional(),
   jerseyNumber: z.number().int().min(1).max(99).optional(),
   club: z.string().max(100).optional(),
   team: z.string().regex(objectIdRegex, 'Invalid Team ID').optional(),
-  position: z.enum(Object.values(PLAYER_POSITIONS)).optional()
-});
+  position: z.enum(Object.values(PLAYER_POSITIONS)).optional(),
+  goals: z.number().int().min(0).optional(),
+  penaltiesScored: z.number().int().min(0).optional(),
+  penaltiesSaved: z.number().int().min(0).optional(),
+  matchesPlayed: z.number().int().min(0).optional(),
+  wins: z.number().int().min(0).optional(),
+  losses: z.number().int().min(0).optional()
+}).passthrough();
 
 module.exports = {
   createPlayerSchema,
