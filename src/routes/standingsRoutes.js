@@ -4,6 +4,7 @@ const leaderboardController = require('../controllers/leaderboardController');
 
 // Tournament standings point table
 router.get('/:tournamentId', leaderboardController.getTournamentStandings);
+router.post('/:tournamentId/recalculate', leaderboardController.recalculateStandings);
 
 // Team specific standing in tournament
 router.get('/:tournamentId/teams/:teamId', leaderboardController.getTeamRanking);

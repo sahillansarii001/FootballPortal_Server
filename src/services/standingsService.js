@@ -85,13 +85,14 @@ class StandingsService {
 
       if (match.winner) {
         const winnerId = match.winner.toString();
+        const winPoints = tournament.rules?.pointsForWin !== undefined ? tournament.rules.pointsForWin : POINTS.WIN;
         if (winnerId === teamAId) {
           teamStats[teamAId].won += 1;
-          teamStats[teamAId].points += POINTS.WIN;
+          teamStats[teamAId].points += winPoints;
           teamStats[teamBId].lost += 1;
         } else if (winnerId === teamBId) {
           teamStats[teamBId].won += 1;
-          teamStats[teamBId].points += POINTS.WIN;
+          teamStats[teamBId].points += winPoints;
           teamStats[teamAId].lost += 1;
         }
       }

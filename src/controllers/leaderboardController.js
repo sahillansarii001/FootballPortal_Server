@@ -8,6 +8,11 @@ const getTournamentStandings = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, 'Tournament standings fetched successfully', standings);
 });
 
+const recalculateStandings = asyncHandler(async (req, res) => {
+  const standings = await StandingsService.recalculateTournamentStandings(req.params.tournamentId);
+  return ApiResponse.success(res, 'Tournament standings recalculated successfully', standings);
+});
+
 const getTeamRanking = asyncHandler(async (req, res) => {
   const { tournamentId, teamId } = req.params;
   const ranking = await StandingsService.getTeamRanking(tournamentId, teamId);
@@ -44,6 +49,7 @@ const getAllPlayerRecords = asyncHandler(async (req, res) => {
 
 module.exports = {
   getTournamentStandings,
+  recalculateStandings,
   getTeamRanking,
   getOverallLeaderboard,
   getTopGoalScorers,

@@ -145,7 +145,7 @@ class TeamService {
 
       const teamMatches = completedMatches
         .filter((m) => (m.teamA && m.teamA.toString() === tid) || (m.teamB && m.teamB.toString() === tid))
-        .slice(0, 5);
+        .slice(0, 3);
 
       const form = teamMatches.map((m) => {
         const isTeamA = m.teamA && m.teamA.toString() === tid;
@@ -155,8 +155,7 @@ class TeamService {
           return m.winner.toString() === tid ? 'W' : 'L';
         }
         if (myScore > oppScore) return 'W';
-        if (myScore < oppScore) return 'L';
-        return 'D';
+        return 'L';
       });
 
       const position = idx + 1;
@@ -198,7 +197,7 @@ class TeamService {
       isFinalized: true
     })
       .sort({ matchDate: -1, updatedAt: -1, createdAt: -1 })
-      .limit(5)
+      .limit(3)
       .lean();
 
     const tid = team._id.toString();
@@ -210,8 +209,7 @@ class TeamService {
         return m.winner.toString() === tid ? 'W' : 'L';
       }
       if (myScore > oppScore) return 'W';
-      if (myScore < oppScore) return 'L';
-      return 'D';
+      return 'L';
     });
 
     return {
