@@ -164,7 +164,7 @@ class MatchService {
   static async updateMatch(id, updateData) {
     const match = await Match.findById(id);
     if (!match) {
-      throw new Error('Match not found');
+      return null;
     }
 
     if (match.status === MATCH_STATUS.COMPLETED && updateData.status !== MATCH_STATUS.COMPLETED) {
@@ -222,7 +222,7 @@ class MatchService {
   static async deleteMatch(id) {
     const match = await Match.findById(id);
     if (!match) {
-      throw new Error('Match not found');
+      return null;
     }
 
     if (match.status === MATCH_STATUS.COMPLETED) {
@@ -321,7 +321,7 @@ class MatchService {
       });
 
     if (!match) {
-      throw new Error('Match not found');
+      return null;
     }
 
     return MatchService.attachLiveTimer(match);
@@ -350,7 +350,7 @@ class MatchService {
       .populate('winner', 'name logo');
 
     if (!match) {
-      throw new Error('Match not found');
+      return null;
     }
 
     const remainingTime = TimerService.calculateRemainingTime(match);

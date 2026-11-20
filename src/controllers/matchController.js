@@ -66,6 +66,9 @@ const getCompletedMatches = asyncHandler(async (req, res) => {
 
 const getMatchById = asyncHandler(async (req, res) => {
   const match = await MatchService.getMatchById(req.params.id);
+  if (!match) {
+    return ApiResponse.notFound(res, 'Match not found');
+  }
   return ApiResponse.success(res, 'Match fetched successfully', match);
 });
 
@@ -76,6 +79,9 @@ const getMatchesByTeam = asyncHandler(async (req, res) => {
 
 const getLiveMatchState = asyncHandler(async (req, res) => {
   const state = await MatchService.getLiveMatchState(req.params.id);
+  if (!state) {
+    return ApiResponse.notFound(res, 'Live match state not found');
+  }
   return ApiResponse.success(res, 'Authoritative live match state fetched successfully', state);
 });
 
