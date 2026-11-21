@@ -1305,24 +1305,35 @@ class TimerService {
     match.timer.phaseEndsAt = null;
 
     // Check if match had a penalty shootout winner or sudden death winner
+    const penA = match.shootout?.teamAPenaltyScore ?? 0;
+    const penB = match.shootout?.teamBPenaltyScore ?? 0;
+    const hasPenalties = Boolean(match.shootout?.isShootout || penA > 0 || penB > 0);
+
     if (!match.winner) {
-      const penA = match.shootout?.teamAPenaltyScore ?? 0;
-      const penB = match.shootout?.teamBPenaltyScore ?? 0;
       if (match.shootout?.shootoutWinner) {
         match.winner = match.shootout.shootoutWinner;
       } else if (penA > penB) {
         match.winner = match.teamA;
         match.shootout = match.shootout || {};
         match.shootout.shootoutWinner = match.teamA;
+        match.shootout.isShootout = true;
         match.shootout.isCompleted = true;
       } else if (penB > penA) {
         match.winner = match.teamB;
         match.shootout = match.shootout || {};
         match.shootout.shootoutWinner = match.teamB;
+        match.shootout.isShootout = true;
         match.shootout.isCompleted = true;
       } else if (match.toss?.winner) {
         match.winner = match.toss.winner;
       }
+    }
+
+    if (hasPenalties && match.winner) {
+      match.shootout = match.shootout || {};
+      match.shootout.isShootout = true;
+      match.shootout.isCompleted = true;
+      if (!match.shootout.shootoutWinner) match.shootout.shootoutWinner = match.winner;
     }
     await match.save();
 

@@ -302,6 +302,11 @@ const socketEmitter = {
       io.emit('teams:update', { teamId });
     }
   },
+  broadcastTeamsUpdate: (data) => {
+    if (io) {
+      io.emit('teams:update', data || {});
+    }
+  },
 
   // Broadcast player changes
   broadcastPlayerCreated: (data) => {

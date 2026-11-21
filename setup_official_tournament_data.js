@@ -100,6 +100,17 @@ async function seedTournamentData() {
     let captainId = null;
 
     for (const pData of playerList) {
+      // Check if jersey number is already taken in this team by a test/dummy player
+      const conflict = await Player.findOne({ team: teamDoc._id, jerseyNumber: pData.jerseyNumber });
+      if (conflict && conflict.name !== pData.name) {
+        if (conflict.name.toLowerCase().includes('test')) {
+          console.log(`Removing placeholder player: ${conflict.name} #${conflict.jerseyNumber}`);
+          await Player.deleteOne({ _id: conflict._id });
+        } else {
+          pData.jerseyNumber = pData.jerseyNumber + 50;
+        }
+      }
+
       let pDoc = await Player.findOne({ name: pData.name, team: teamDoc._id });
       if (!pDoc) {
         // Check if player exists by name without team or with different team (e.g. taha)

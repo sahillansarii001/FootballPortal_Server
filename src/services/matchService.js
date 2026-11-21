@@ -309,6 +309,8 @@ class MatchService {
       .populate('teamA', 'name logo coach')
       .populate('teamB', 'name logo coach')
       .populate('tournament', 'name')
+      .populate('winner', 'name logo')
+      .populate('shootout.shootoutWinner', 'name logo')
       .populate({
         path: 'events',
         match: { isUndone: false, type: { $in: [EVENT_TYPES.GOAL_SCORED, 'GOAL'] } },

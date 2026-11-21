@@ -110,16 +110,25 @@ class TeamService {
   static async deleteTeam(id) {
     const team = await Team.findById(id);
     if (!team) {
-      throw new Error('Team not found');
+      const err = new Error('Team not found');
+      err.statusCode = 404;
+      throw err;
     }
 
-    // Check if team is involved in any matches
-    const matchCount = await Match.countDocuments({
+    const MatchEvent = require('../models/MatchEvent');
+    const PenaltyShootout = require('../models/PenaltyShootout');
+    const StandingsService = require('./standingsService');
+
+    // Find and clean up any matches involving this team
+    const matches = await Match.find({
       $or: [{ teamA: id }, { teamB: id }]
     });
+    const matchIds = matches.map((m) => m._id);
 
-    if (matchCount > 0) {
-      throw new Error('Cannot delete team that has scheduled or completed matches');
+    if (matchIds.length > 0) {
+      await MatchEvent.deleteMany({ match: { $in: matchIds } });
+      await PenaltyShootout.deleteMany({ match: { $in: matchIds } });
+      await Match.deleteMany({ _id: { $in: matchIds } });
     }
 
     // Delete or unassign players and clean tournament references
@@ -128,7 +137,19 @@ class TeamService {
     await TournamentStanding.deleteMany({ team: id });
     await team.deleteOne();
 
-    return { message: 'Team and its players deleted successfully' };
+    // Recalculate standings for tournaments so standings stay 100% updated
+    try {
+      const tournaments = await Tournament.find();
+      for (const t of tournaments) {
+        if (typeof StandingsService.recalculateTournamentStandings === 'function') {
+          await StandingsService.recalculateTournamentStandings(t._id).catch(() => {});
+        }
+      }
+    } catch (e) {
+      // Non-fatal recalculation error
+    }
+
+    return { message: 'Team, roster athletes, and associated fixtures deleted successfully' };
   }
 
   static async getAllTeams(query = {}) {
