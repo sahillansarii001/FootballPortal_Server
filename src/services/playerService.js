@@ -122,6 +122,7 @@ class PlayerService {
     }
 
     await Team.findByIdAndUpdate(player.team, { $pull: { players: player._id } });
+    await Team.updateMany({ captain: player._id }, { $unset: { captain: 1 } });
     await player.deleteOne();
 
     return { message: 'Player deleted successfully' };
