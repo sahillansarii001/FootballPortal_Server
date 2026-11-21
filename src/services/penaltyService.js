@@ -75,13 +75,30 @@ class PenaltyService {
       }
 
       if (match.status === MATCH_STATUS.COMPLETED && match.isFinalized) {
-        // Still allow recording if needed or return existing
+        throw new Error('This match has already been completed.');
       }
+
+      const tournament = await Tournament.findById(match.tournament).session(session);
+      const initialKicks = tournament?.rules?.initialPenaltyKicks || DEFAULT_INITIAL_PENALTY_KICKS;
 
       const isTeamA = match.teamA.toString() === teamId;
       const isTeamB = match.teamB.toString() === teamId;
       if (!isTeamA && !isTeamB) {
         throw new Error('Team is not participating in this match');
+      }
+
+      if (isTeamA && match.shootout?.teamAPenaltiesTaken >= initialKicks) {
+        throw new Error(`Team A has already completed all ${initialKicks} regulation penalties.`);
+      }
+      if (isTeamB && match.shootout?.teamBPenaltiesTaken >= initialKicks) {
+        throw new Error(`Team B has already completed all ${initialKicks} regulation penalties.`);
+      }
+      if (match.shootout?.teamAPenaltiesTaken >= initialKicks && match.shootout?.teamBPenaltiesTaken >= initialKicks) {
+        if (match.shootout?.teamAPenaltyScore === match.shootout?.teamBPenaltyScore) {
+          throw new Error('Regulation penalties tied after 3 kicks each. Please conduct Sudden Death Coin Toss.');
+        } else {
+          throw new Error('Penalty shootout already decided.');
+        }
       }
 
       let taker = await Player.findById(playerId).session(session);
@@ -109,9 +126,6 @@ class PenaltyService {
         goalkeeper = (await Player.findOne({ team: opposingTeamId, position: 'Goalkeeper' }).session(session))
           || (await Player.findOne({ team: opposingTeamId }).session(session));
       }
-
-      const tournament = await Tournament.findById(match.tournament).session(session);
-      const initialKicks = tournament?.rules?.initialPenaltyKicks || DEFAULT_INITIAL_PENALTY_KICKS;
 
       // Count existing penalties taken
       const totalPenaltiesCount = await PenaltyShootout.countDocuments({ match: matchId }).session(session);
