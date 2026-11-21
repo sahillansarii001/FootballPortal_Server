@@ -1,6 +1,8 @@
 const Team = require('../models/Team');
 const Player = require('../models/Player');
 const Match = require('../models/Match');
+const Tournament = require('../models/Tournament');
+const TournamentStanding = require('../models/TournamentStanding');
 
 function escapeRegex(text) {
   return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
@@ -31,6 +33,43 @@ class TeamService {
     }
 
     const team = await Team.create(payload);
+
+    // Synchronize team with active tournament and standings
+    try {
+      const activeTournament = (await Tournament.findOne({ status: 'Ongoing' })) || (await Tournament.findOne().sort({ createdAt: -1 }));
+      if (activeTournament) {
+        if (!activeTournament.participatingTeams.some((t) => t.toString() === team._id.toString())) {
+          activeTournament.participatingTeams.push(team._id);
+          await activeTournament.save();
+        }
+        await TournamentStanding.findOneAndUpdate(
+          { tournament: activeTournament._id, team: team._id },
+          {
+            $setOnInsert: {
+              tournament: activeTournament._id,
+              team: team._id,
+              matchesPlayed: 0,
+              matchesWon: 0,
+              matchesLost: 0,
+              goalsScored: 0,
+              goalsConceded: 0,
+              goalDifference: 0,
+              totalPoints: 0,
+              won: 0,
+              lost: 0,
+              goalsFor: 0,
+              goalsAgainst: 0,
+              points: 0,
+              position: 99
+            }
+          },
+          { upsert: true, new: true }
+        );
+      }
+    } catch (e) {
+      // Non-fatal tournament sync
+    }
+
     return team;
   }
 
@@ -83,8 +122,10 @@ class TeamService {
       throw new Error('Cannot delete team that has scheduled or completed matches');
     }
 
-    // Delete or unassign players
+    // Delete or unassign players and clean tournament references
     await Player.deleteMany({ team: id });
+    await Tournament.updateMany({}, { $pull: { participatingTeams: id } });
+    await TournamentStanding.deleteMany({ team: id });
     await team.deleteOne();
 
     return { message: 'Team and its players deleted successfully' };

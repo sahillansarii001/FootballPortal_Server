@@ -173,9 +173,13 @@ class StandingsService {
       .populate('team', 'name logo coach')
       .sort({ position: 1 });
 
+    // Clean out any orphaned records where team no longer exists
+    standings = (standings || []).filter((s) => s && s.team != null);
+
     if (!standings || standings.length === 0) {
       try {
         standings = await this.recalculateTournamentStandings(resolvedTournamentId);
+        standings = (standings || []).filter((s) => s && s.team != null);
       } catch (err) {
         // Fallback gracefully
       }
