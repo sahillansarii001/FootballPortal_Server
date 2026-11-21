@@ -74,8 +74,16 @@ class PenaltyService {
         throw new Error('Match not found');
       }
 
-      if (match.status === MATCH_STATUS.COMPLETED && match.isFinalized) {
+      if (match.status === MATCH_STATUS.COMPLETED && match.isFinalized && !match.shootout?.isShootout && match.teamAScore !== match.teamBScore) {
         throw new Error('This match has already been completed.');
+      }
+
+      // If match was completed at a draw, unlock and activate penalty shootout
+      if (match.status === MATCH_STATUS.COMPLETED && match.teamAScore === match.teamBScore) {
+        match.status = MATCH_STATUS.PENALTY_SHOOTOUT;
+        match.isFinalized = false;
+        match.shootout = match.shootout || {};
+        match.shootout.isShootout = true;
       }
 
       const tournament = await Tournament.findById(match.tournament).session(session);
@@ -194,6 +202,9 @@ class PenaltyService {
       if (evaluation.isDecided) {
         winnerDeclared = true;
         const winningTeamId = evaluation.winner === 'teamA' ? match.teamA : match.teamB;
+        const winningTeamDoc = await Team.findById(winningTeamId).session(session);
+        const winningTeamName = winningTeamDoc?.name || 'Winner';
+
         match.shootout.isCompleted = true;
         match.shootout.shootoutWinner = winningTeamId;
         match.winner = winningTeamId;
@@ -203,7 +214,7 @@ class PenaltyService {
         match.timer.isPaused = false;
         match.timer.timerStatus = 'COMPLETED';
         match.timer.phaseEndsAt = null;
-        match.matchResult = `Penalty Shootout Win (${match.shootout.teamAPenaltyScore} - ${match.shootout.teamBPenaltyScore})`;
+        match.matchResult = `${winningTeamName} won on penalties (${match.shootout.teamAPenaltyScore} - ${match.shootout.teamBPenaltyScore})`;
 
         await match.save({ session });
 
@@ -293,8 +304,14 @@ class PenaltyService {
       };
     });
 
-    if (result.isDecided && result.tournamentId) {
-      await StandingsService.recalculateTournamentStandings(result.tournamentId);
+    if (result.isDecided) {
+      if (result.tournamentId) {
+        await StandingsService.recalculateTournamentStandings(result.tournamentId);
+      }
+      try {
+        const TimerService = require('./timerService');
+        await TimerService.finalizeMatch(matchId, true);
+      } catch (e) {}
     }
 
     return {

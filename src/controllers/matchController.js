@@ -206,7 +206,7 @@ const endMatch = asyncHandler(async (req, res) => {
   }
 
   await match.save();
-  await TimerService.finalizeMatch(match._id);
+  await TimerService.finalizeMatch(match._id, true);
 
   if (match.tournament) {
     await StandingsService.recalculateTournamentStandings(match.tournament);

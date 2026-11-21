@@ -754,6 +754,7 @@ class TimerService {
 
     if (targetStage === TIMER_STAGES.PENALTY_SHOOTOUT) {
       match.status = MATCH_STATUS.PENALTY_SHOOTOUT;
+      match.isFinalized = false;
       match.timer.currentStage = TIMER_STAGES.PENALTY_SHOOTOUT;
       match.timer.stageDuration = 0;
       match.timer.remainingTime = 0;
@@ -763,6 +764,7 @@ class TimerService {
       match.timer.timerStatus = 'COMPLETED';
       match.shootout = match.shootout || {};
       match.shootout.isShootout = true;
+      match.shootout.isCompleted = false;
       match.matchResult = 'Draw - Penalty Shootout Active';
     } else if (targetStage === TIMER_STAGES.COMPLETED) {
       match.status = MATCH_STATUS.COMPLETED;
@@ -1024,12 +1026,12 @@ class TimerService {
 
     try {
       const match = await Match.findById(matchId);
-      if (!match || !match.timer.isRunning) {
+      if (!match) {
         return null;
       }
 
-      // Completed matches can never advance
-      if (match.status === MATCH_STATUS.COMPLETED || match.timer.currentStage === TIMER_STAGES.COMPLETED) {
+      // Completed matches can never advance unless tied and requiring a penalty shootout
+      if ((match.status === MATCH_STATUS.COMPLETED || match.timer.currentStage === TIMER_STAGES.COMPLETED) && match.teamAScore !== match.teamBScore) {
         return match;
       }
 
@@ -1049,7 +1051,7 @@ class TimerService {
         } else {
           nextStage = TIMER_STAGES.COMPLETED;  // Lead -> match complete
         }
-      } else if (currentStage === TIMER_STAGES.EXTRA_TIME) {
+      } else if (currentStage === TIMER_STAGES.EXTRA_TIME || (match.status === MATCH_STATUS.COMPLETED && match.teamAScore === match.teamBScore)) {
         if (match.teamAScore === match.teamBScore) {
           nextStage = TIMER_STAGES.PENALTY_SHOOTOUT; // Still tied -> penalty shootout
         } else {
@@ -1291,9 +1293,10 @@ class TimerService {
   /**
    * Finalize match: updates player stats and tournament standings (idempotent, prevents double-counting)
    */
-  static async finalizeMatch(matchId) {
+  static async finalizeMatch(matchId, force = false) {
     const match = await Match.findById(matchId);
-    if (!match || match.isFinalized) {
+    if (!match) return null;
+    if (match.isFinalized && !force && match.statsCredited) {
       return match;
     }
 
@@ -1337,24 +1340,29 @@ class TimerService {
     }
     await match.save();
 
-    const teamAPlayers = await Player.find({ team: match.teamA });
-    const teamBPlayers = await Player.find({ team: match.teamB });
+    if (!match.statsCredited) {
+      match.statsCredited = true;
+      await match.save();
 
-    const isTeamAWinner = match.winner && match.winner.toString() === match.teamA.toString();
-    const isTeamBWinner = match.winner && match.winner.toString() === match.teamB.toString();
+      const teamAPlayers = await Player.find({ team: match.teamA });
+      const teamBPlayers = await Player.find({ team: match.teamB });
 
-    for (const player of teamAPlayers) {
-      player.matchesPlayed += 1;
-      if (isTeamAWinner) player.wins += 1;
-      else if (isTeamBWinner) player.losses += 1;
-      await player.save();
-    }
+      const isTeamAWinner = match.winner && match.winner.toString() === match.teamA.toString();
+      const isTeamBWinner = match.winner && match.winner.toString() === match.teamB.toString();
 
-    for (const player of teamBPlayers) {
-      player.matchesPlayed += 1;
-      if (isTeamBWinner) player.wins += 1;
-      else if (isTeamAWinner) player.losses += 1;
-      await player.save();
+      for (const player of teamAPlayers) {
+        player.matchesPlayed += 1;
+        if (isTeamAWinner) player.wins += 1;
+        else if (isTeamBWinner) player.losses += 1;
+        await player.save();
+      }
+
+      for (const player of teamBPlayers) {
+        player.matchesPlayed += 1;
+        if (isTeamBWinner) player.wins += 1;
+        else if (isTeamAWinner) player.losses += 1;
+        await player.save();
+      }
     }
 
     // Recalculate tournament standings cleanly

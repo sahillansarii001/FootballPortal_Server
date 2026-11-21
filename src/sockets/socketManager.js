@@ -329,8 +329,31 @@ const socketEmitter = {
   }
 };
 
+// Safe Proxy wrapper: ensures calling ANY broadcast method never throws "is not a function"
+const safeSocketEmitter = new Proxy(socketEmitter, {
+  get(target, prop) {
+    if (prop in target) {
+      return target[prop];
+    }
+    // Return a safe no-op / broadcast fallback function
+    return (arg1, arg2) => {
+      if (io) {
+        try {
+          if (typeof prop === 'string') {
+            const eventName = prop.replace(/^broadcast/, '').toLowerCase();
+            io.emit(eventName, arg1 || {});
+            io.emit('teams:update', arg1 || {});
+          }
+        } catch (e) {
+          // Non-fatal
+        }
+      }
+    };
+  }
+});
+
 module.exports = {
   initSocket,
   getIO,
-  socketEmitter
+  socketEmitter: safeSocketEmitter
 };

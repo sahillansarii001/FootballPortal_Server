@@ -13,6 +13,7 @@ const getTimerStatus = asyncHandler(async (req, res) => {
   const timerStatus = match.timer.timerStatus || (match.timer.isRunning ? (match.timer.isPaused ? 'PAUSED' : 'RUNNING') : 'IDLE');
 
   return ApiResponse.success(res, 'Timer status fetched successfully', {
+    _id: match._id,
     matchId: match._id,
     status: match.status,
     phase: match.timer.currentStage,
@@ -38,6 +39,7 @@ const startTimer = asyncHandler(async (req, res) => {
   const timerStatus = match.timer.timerStatus || (match.timer.isRunning ? (match.timer.isPaused ? 'PAUSED' : 'RUNNING') : 'IDLE');
 
   return ApiResponse.success(res, 'Timer started successfully', {
+    _id: match._id,
     matchId: match._id,
     status: match.status,
     phase: match.timer.currentStage,
@@ -59,6 +61,7 @@ const pauseTimer = asyncHandler(async (req, res) => {
   const timerStatus = 'PAUSED';
 
   return ApiResponse.success(res, 'Timer paused successfully', {
+    _id: match._id,
     matchId: match._id,
     status: match.status,
     phase: match.timer.currentStage,
@@ -80,6 +83,7 @@ const resumeTimer = asyncHandler(async (req, res) => {
   const timerStatus = 'RUNNING';
 
   return ApiResponse.success(res, 'Timer resumed successfully', {
+    _id: match._id,
     matchId: match._id,
     status: match.status,
     phase: match.timer.currentStage,
@@ -98,6 +102,7 @@ const resumeTimer = asyncHandler(async (req, res) => {
 const resetTimer = asyncHandler(async (req, res) => {
   const match = await TimerService.resetTimer(req.params.id, req.user?._id);
   return ApiResponse.success(res, 'Timer reset successfully', {
+    _id: match._id,
     matchId: match._id,
     status: match.status,
     phase: match.timer.currentStage,
@@ -116,6 +121,7 @@ const advanceStage = asyncHandler(async (req, res) => {
   }
   const remainingTime = TimerService.calculateRemainingTime(match);
   return ApiResponse.success(res, 'Stage advanced successfully', {
+    _id: match._id,
     matchId: match._id,
     status: match.status,
     phase: match.timer.currentStage,
@@ -136,6 +142,7 @@ const addTime = asyncHandler(async (req, res) => {
   const match = await TimerService.addTime(req.params.id, seconds, req.user?._id);
   const remainingTime = TimerService.calculateRemainingTime(match);
   return ApiResponse.success(res, 'Extra time added successfully', {
+    _id: match._id,
     matchId: match._id,
     status: match.status,
     phase: match.timer.currentStage,
@@ -164,6 +171,7 @@ const setStage = asyncHandler(async (req, res) => {
   const match = await TimerService.setStage(req.params.id, stage, duration, req.user?._id);
   const remainingTime = TimerService.calculateRemainingTime(match);
   return ApiResponse.success(res, `Stage set to ${match.timer.currentStage} successfully`, {
+    _id: match._id,
     matchId: match._id,
     status: match.status,
     phase: match.timer.currentStage,
@@ -191,6 +199,7 @@ const setClockTime = asyncHandler(async (req, res) => {
   const match = await TimerService.setClockTime(req.params.id, seconds, req.user?._id);
   const remainingTime = TimerService.calculateRemainingTime(match);
   return ApiResponse.success(res, 'Clock time set successfully', {
+    _id: match._id,
     matchId: match._id,
     status: match.status,
     phase: match.timer.currentStage,
