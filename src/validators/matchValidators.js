@@ -40,8 +40,16 @@ const scheduleMatchSchema = z.object({
   teamB: z.string().regex(objectIdRegex, 'Invalid Team B ID'),
   matchDate: z.string().refine((val) => isValidFlexibleDate(val), {
     message: 'Invalid match date format (expected YYYY-MM-DD or DD-MM-YYYY)'
+  }).refine((val) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const parsed = new Date(parseToIsoDateString(val));
+    parsed.setHours(0, 0, 0, 0);
+    return parsed >= today;
+  }, {
+    message: 'Match date cannot be in the past. Matches must be scheduled for today or a future date.'
   }),
-  matchTime: z.string().min(1, 'Match time is required (e.g. 15:00)'),
+  matchTime: z.string().optional().default('14:00'),
   venue: z.string().min(2, 'Venue is required'),
   stage: z.string().optional()
 }).refine((data) => data.teamA !== data.teamB, {

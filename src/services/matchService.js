@@ -98,6 +98,15 @@ class MatchService {
       );
     }
 
+    // Ensure match date cannot be scheduled before today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const scheduledDate = new Date(targetDate);
+    scheduledDate.setHours(0, 0, 0, 0);
+    if (scheduledDate < today) {
+      throw new Error('Match date cannot be in the past. Matches must be scheduled for today or a future date.');
+    }
+
     const halfDuration = tournament.rules?.halfDurationSeconds || STAGE_DURATIONS[TIMER_STAGES.FIRST_HALF];
 
     const match = await Match.create({
@@ -106,7 +115,7 @@ class MatchService {
       teamA: teamAId,
       teamB: teamBId,
       matchDate: targetDate,
-      matchTime,
+      matchTime: matchTime || '14:00',
       venue,
       stage: stage || 'Group Stage',
       status: MATCH_STATUS.UPCOMING,
