@@ -22,6 +22,13 @@ class GoalService {
         throw new Error('Cannot add goals to a completed match');
       }
 
+      if (match.status === 'Upcoming') {
+        match.status = 'Live';
+        if (!match.timer) {
+          match.timer = { isRunning: true, remainingTime: 240, currentStage: 'First Half' };
+        }
+      }
+
       const isTeamA = match.teamA.toString() === teamId;
       const isTeamB = match.teamB.toString() === teamId;
       if (!isTeamA && !isTeamB) {
