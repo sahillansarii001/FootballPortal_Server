@@ -26,6 +26,11 @@ const tournamentStandingSchema = new mongoose.Schema(
       default: 0,
       min: 0
     },
+    drawn: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
     lost: {
       type: Number,
       default: 0,
@@ -51,6 +56,11 @@ const tournamentStandingSchema = new mongoose.Schema(
       min: 0
     },
     matchesWon: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    matchesDrawn: {
       type: Number,
       default: 0,
       min: 0
@@ -85,22 +95,24 @@ const tournamentStandingSchema = new mongoose.Schema(
     toJSON: {
       virtuals: true,
       transform: (doc, ret) => {
-        ret.matchesWon = ret.matchesWon !== undefined ? ret.matchesWon : ret.won;
-        ret.matchesLost = ret.matchesLost !== undefined ? ret.matchesLost : ret.lost;
-        ret.goalsScored = ret.goalsScored !== undefined ? ret.goalsScored : ret.goalsFor;
-        ret.goalsConceded = ret.goalsConceded !== undefined ? ret.goalsConceded : ret.goalsAgainst;
-        ret.totalPoints = ret.totalPoints !== undefined ? ret.totalPoints : ret.points;
+        ret.matchesWon = ret.matchesWon !== undefined ? ret.matchesWon : (ret.won || 0);
+        ret.matchesDrawn = ret.matchesDrawn !== undefined ? ret.matchesDrawn : (ret.drawn || 0);
+        ret.matchesLost = ret.matchesLost !== undefined ? ret.matchesLost : (ret.lost || 0);
+        ret.goalsScored = ret.goalsScored !== undefined ? ret.goalsScored : (ret.goalsFor || 0);
+        ret.goalsConceded = ret.goalsConceded !== undefined ? ret.goalsConceded : (ret.goalsAgainst || 0);
+        ret.totalPoints = ret.totalPoints !== undefined ? ret.totalPoints : (ret.points || 0);
         return ret;
       }
     },
     toObject: {
       virtuals: true,
       transform: (doc, ret) => {
-        ret.matchesWon = ret.matchesWon !== undefined ? ret.matchesWon : ret.won;
-        ret.matchesLost = ret.matchesLost !== undefined ? ret.matchesLost : ret.lost;
-        ret.goalsScored = ret.goalsScored !== undefined ? ret.goalsScored : ret.goalsFor;
-        ret.goalsConceded = ret.goalsConceded !== undefined ? ret.goalsConceded : ret.goalsAgainst;
-        ret.totalPoints = ret.totalPoints !== undefined ? ret.totalPoints : ret.points;
+        ret.matchesWon = ret.matchesWon !== undefined ? ret.matchesWon : (ret.won || 0);
+        ret.matchesDrawn = ret.matchesDrawn !== undefined ? ret.matchesDrawn : (ret.drawn || 0);
+        ret.matchesLost = ret.matchesLost !== undefined ? ret.matchesLost : (ret.lost || 0);
+        ret.goalsScored = ret.goalsScored !== undefined ? ret.goalsScored : (ret.goalsFor || 0);
+        ret.goalsConceded = ret.goalsConceded !== undefined ? ret.goalsConceded : (ret.goalsAgainst || 0);
+        ret.totalPoints = ret.totalPoints !== undefined ? ret.totalPoints : (ret.points || 0);
         return ret;
       }
     }

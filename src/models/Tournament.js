@@ -61,6 +61,10 @@ const tournamentSchema = new mongoose.Schema(
         type: Number,
         default: POINTS.WIN
       },
+      pointsForDraw: {
+        type: Number,
+        default: POINTS.DRAW !== undefined ? POINTS.DRAW : 0
+      },
       pointsForLoss: {
         type: Number,
         default: POINTS.LOSS
