@@ -51,10 +51,14 @@ class GoalService {
       }
 
       // Determine beneficiary team:
-      // If Own Goal, the opposing team gets the score!
-      let beneficiaryTeamId = teamId;
-      if (goalType === GOAL_TYPES.OWN_GOAL) {
-        beneficiaryTeamId = isTeamA ? match.teamB.toString() : match.teamA.toString();
+      // If beneficiaryTeam is specified, credit that team directly; otherwise if Own Goal, opponent gets score
+      let beneficiaryTeamId = goalData.beneficiaryTeam;
+      if (!beneficiaryTeamId) {
+        if (goalType === GOAL_TYPES.OWN_GOAL) {
+          beneficiaryTeamId = isTeamA ? match.teamB.toString() : match.teamA.toString();
+        } else {
+          beneficiaryTeamId = teamId;
+        }
       }
 
       // Update match score

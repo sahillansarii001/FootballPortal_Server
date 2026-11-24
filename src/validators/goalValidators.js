@@ -8,6 +8,7 @@ const recordGoalSchema = z.object({
   teamId: z.string().optional(),
   player: z.string().optional(),
   playerId: z.string().optional(),
+  beneficiaryTeam: z.string().optional(),
   goalType: z.string().optional(),
   type: z.string().optional(),
   matchTime: z.string().optional(),
@@ -16,6 +17,7 @@ const recordGoalSchema = z.object({
 }).transform((data) => ({
   team: data.team || data.teamId,
   player: data.player || data.playerId,
+  beneficiaryTeam: data.beneficiaryTeam,
   goalType: data.goalType || data.type || GOAL_TYPES.NORMAL,
   matchTime: data.matchTime || data.minute,
   description: data.description
